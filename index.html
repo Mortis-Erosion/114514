@@ -29,9 +29,9 @@
   const input = document.getElementById('input');
   const sendBtn = document.getElementById('sendBtn');
 
-  // 预留API密钥位置
-  const API_KEY = "YOUR_API_KEY_HERE";
-  const API_URL = "https://api.deepseek.com/chat"; // 请替换为实际API地址
+  // 替换为你的实际API密钥
+  const API_KEY = "sk-your-api-key-here";
+  const API_URL = "https://api.deepseek.com/v1/chat/completions";
 
   function appendMessage(sender, text) {
     const msgDiv = document.createElement('div');
@@ -50,21 +50,31 @@
     sendBtn.disabled = true;
 
     try {
-      // 这里示范一个POST请求，具体根据API文档调整
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${API_KEY}`
         },
-        body: JSON.stringify({ message: text })
+        body: JSON.stringify({
+          model: "deepseek-chat",
+          messages: [{ role: "user", content: text }],
+          temperature: 0.7,
+          max_tokens: 2000
+        })
       });
-      if (!response.ok) throw new Error('网络错误');
+      
+      if (!response.ok) {
+        throw new Error(`请求失败: HTTP ${response.status}`);
+      }
+      
       const data = await response.json();
-      // 假设返回格式为 { reply: "回复内容" }
-      appendMessage('bot', data.reply || '无回复');
+      const reply = data.choices?.[0]?.message?.content || '无回复内容';
+      appendMessage('bot', reply);
+      
     } catch (error) {
-      appendMessage('bot', '请求失败: ' + error.message);
+      appendMessage('bot', error.message);
+      console.error('API请求错误:', error);
     } finally {
       sendBtn.disabled = false;
       input.focus();
