@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>简洁API对话网站</title>
+<style>
+  body { font-family: Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
+  #app { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); width: 400px; max-width: 90vw; }
+  h1 { font-size: 1.5em; margin-bottom: 10px; text-align: center; }
+  #chat { height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 4px; background: #fafafa; margin-bottom: 10px; }
+  .message { margin-bottom: 10px; }
+  .user { color: #007bff; font-weight: bold; }
+  .bot { color: #333; }
+  textarea { width: 100%; height: 60px; resize: none; padding: 8px; font-size: 1em; border-radius: 4px; border: 1px solid #ccc; }
+  button { margin-top: 8px; width: 100%; padding: 10px; font-size: 1em; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+  button:disabled { background-color: #aaa; cursor: not-allowed; }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>简洁API对话</h1>
+  <div id="chat"></div>
+  <textarea id="input" placeholder="请输入您的问题..."></textarea>
+  <button id="sendBtn">发送</button>
+</div>
+<script>
+  const chat = document.getElementById('chat');
+  const input = document.getElementById('input');
+  const sendBtn = document.getElementById('sendBtn');
+
+  // 预留API密钥位置
+  const API_KEY = "YOUR_API_KEY_HERE";
+  const API_URL = "https://api.deepseek.com/chat"; // 请替换为实际API地址
+
+  function appendMessage(sender, text) {
+    const msgDiv = document.createElement('div');
+    msgDiv.classList.add('message');
+    msgDiv.classList.add(sender === 'user' ? 'user' : 'bot');
+    msgDiv.textContent = (sender === 'user' ? '你: ' : '机器人: ') + text;
+    chat.appendChild(msgDiv);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  async function sendMessage() {
+    const text = input.value.trim();
+    if (!text) return;
+    appendMessage('user', text);
+    input.value = '';
+    sendBtn.disabled = true;
+
+    try {
+      // 这里示范一个POST请求，具体根据API文档调整
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${API_KEY}`
+        },
+        body: JSON.stringify({ message: text })
+      });
+      if (!response.ok) throw new Error('网络错误');
+      const data = await response.json();
+      // 假设返回格式为 { reply: "回复内容" }
+      appendMessage('bot', data.reply || '无回复');
+    } catch (error) {
+      appendMessage('bot', '请求失败: ' + error.message);
+    } finally {
+      sendBtn.disabled = false;
+      input.focus();
+    }
+  }
+
+  sendBtn.addEventListener('click', sendMessage);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+</script>
+</body>
+</html>
