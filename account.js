@@ -78,42 +78,15 @@ async function resetPassword(account) {
   }
 }
 
-// 密码强度检测
-passwordInput.addEventListener('input', function() {
-  const password = this.value;
-  let strength = 0;
-  
-  // 长度检测
-  if (password.length >= 8) strength += 25;
-  if (password.length >= 12) strength += 15;
-  
-  // 包含数字
-  if (/\d/.test(password)) strength += 20;
-  
-  // 包含小写字母
-  if (/[a-z]/.test(password)) strength += 15;
-  
-  // 包含大写字母
-  if (/[A-Z]/.test(password)) strength += 15;
-  
-  // 包含特殊字符
-  if (/[^A-Za-z0-9]/.test(password)) strength += 20;
-  
-  // 更新强度条
-  strengthMeter.style.width = Math.min(strength, 100) + '%';
-  
-  // 更新颜色
-  if (strength < 40) {
-    strengthMeter.style.background = '#e74c3c';
-  } else if (strength < 70) {
-    strengthMeter.style.background = '#f39c12';
-  } else {
-    strengthMeter.style.background = '#2ecc71';
-  }
-});
+// 密码强度检测 - 使用strength-meter.js模块
+import { initStrengthMeter } from './strength-meter.js';
+
+// 初始化密码强度检测器
+initStrengthMeter(passwordInput, document.querySelector('.strength-meter'));
+
 
 // 注册功能
-registerBtn.addEventListener('click', async function() {
+async function handleRegister() {
   const account = registerAccountInput.value;
   const password = passwordInput.value;
   const confirmPassword = document.getElementById('confirmPassword').value;
@@ -177,12 +150,13 @@ registerBtn.addEventListener('click', async function() {
     alert(`注册失败: ${error.message || '未知错误'}`);
     console.error('注册错误:', error);
   } finally {
-    registerBtn.innerHTML = '注册账号';
+    const registerBtn = document.getElementById('registerBtn');
+    if (registerBtn) registerBtn.innerHTML = '注册账号';
   }
-});
+}
 
 // 登录功能
-loginBtn.addEventListener('click', async function() {
+async function handleLogin() {
   const account = loginAccountInput.value;
   const password = loginPasswordInput.value;
   const email = account; // 直接使用用户输入的邮箱作为用户名
@@ -234,11 +208,12 @@ loginBtn.addEventListener('click', async function() {
     }
     console.error('登录错误:', error);
   } finally {
-    loginBtn.innerHTML = '登录账号';
+    const loginBtn = document.getElementById('loginBtn');
+    if (loginBtn) loginBtn.innerHTML = '登录';
   }
-});
+}
 
-// 切换到聊天页面
+// 切换到聊天页面 - 使用全局状态管理
 function switchToChatPage() {
   // 更新页面内容
   document.querySelector('#chatPage .header h1').textContent = `智能聊天助手 - ${currentUserAccount}`;
@@ -254,25 +229,28 @@ function switchToChatPage() {
     // 清除输入框
     document.getElementById('input').focus();
     
-    // 重新初始化聊天事件并获取函数
-    import('./chat.js').then(module => {
-      if (module.initChatEvents) {
-        module.initChatEvents();
-      }
-      if (module.appendMessage) {
-        // 添加欢迎消息
-        setTimeout(() => {
-          module.appendMessage('bot', `您好！欢迎使用智能聊天助手。我是您的AI助手，随时为您提供帮助。`);
-        }, 500);
-      }
-    }).catch(err => {
-      console.error('无法重新初始化聊天事件:', err);
-    });
+    // 确保聊天事件只初始化一次
+    if (!window.chatEventsInitialized) {
+      import('./chat.js').then(module => {
+        if (module.initChatEvents) {
+          module.initChatEvents();
+          window.chatEventsInitialized = true;
+        }
+        if (module.appendMessage) {
+          // 添加欢迎消息
+          setTimeout(() => {
+            module.appendMessage('bot', `欢迎回来，${currentUserAccount || '用户'}！有什么我可以帮助您的吗？`);
+          }, 500);
+        }
+      }).catch(err => {
+        console.error('无法重新初始化聊天事件:', err);
+      });
+    }
   }, 500);
 }
 
 // 登出功能
-logoutBtn.addEventListener('click', async function() {
+async function handleLogout() {
   try {
     // 使用Supabase登出
     const { error } = await supabase.auth.signOut();
@@ -298,7 +276,7 @@ logoutBtn.addEventListener('click', async function() {
     console.error('登出错误:', error);
     alert(`登出失败: ${error.message || '未知错误'}`);
   }
-});
+}
 
 // 显示用户信息
 function showUserInfo() {
@@ -343,34 +321,66 @@ async function checkUserSession() {
   }
 }
 
-// 应用初始化时检查会话
-function initAccountEvents() {
-  // 检查用户会话
-  checkUserSession();
-  
-  // 绑定忘记密码点击事件
-  const forgotPasswordLink = document.querySelector('.form-group a[href="#"]');
-  if (forgotPasswordLink) {
-    forgotPasswordLink.addEventListener('click', function(e) {
-      e.preventDefault();
-      const account = loginAccountInput.value;
-      
-      if (!account) {
-        alert('请先输入您的邮箱地址');
-        return;
-      }
-      
-      resetPassword(account);
-    });
+// 登录状态管理
+let authInitialized = false;
+
+// 忘记密码处理函数
+function handleForgotPassword(e) {
+  e.preventDefault();
+  const account = document.getElementById('loginAccount')?.value;
+  if (!account) {
+    alert('请先输入您的邮箱地址');
+    return;
   }
+  resetPassword(account);
 }
 
-// 确保DOM已加载
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initAccountEvents);
-} else {
-  initAccountEvents();
+// 确保DOM元素存在后再绑定事件
+function initAccountEvents() {
+  if (authInitialized) return;
+  authInitialized = true;
+  
+  // 延迟绑定事件，确保DOM完全加载
+  setTimeout(() => {
+    const registerTab = document.getElementById('registerTab');
+    const loginTab = document.getElementById('loginTab');
+    const registerBtn = document.getElementById('registerBtn');
+    const loginBtn = document.getElementById('loginBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+    
+    // 绑定事件
+    if (registerTab) {
+      registerTab.addEventListener('click', () => {
+        document.getElementById('loginForm')?.classList.add('hidden');
+        document.getElementById('registerForm')?.classList.remove('hidden');
+      });
+    }
+    
+    if (loginTab) {
+      loginTab.addEventListener('click', () => {
+        document.getElementById('registerForm')?.classList.add('hidden');
+        document.getElementById('loginForm')?.classList.remove('hidden');
+      });
+    }
+    
+    if (registerBtn) registerBtn.addEventListener('click', handleRegister);
+    if (loginBtn) loginBtn.addEventListener('click', handleLogin);
+    if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
+    
+    // 忘记密码事件优化
+    const forgotPasswordLink = document.querySelector('.form-group a[href="#"]');
+    if (forgotPasswordLink) {
+      forgotPasswordLink.removeEventListener('click', handleForgotPassword);
+      forgotPasswordLink.addEventListener('click', handleForgotPassword);
+    }
+    
+    // 检查用户会话
+    checkUserSession();
+  }, 100);
 }
+
+// 导出初始化函数
+export { initAccountEvents };
 
 // 重新发送验证邮件
 async function resendVerificationEmail(email) {

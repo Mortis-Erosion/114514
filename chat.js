@@ -190,39 +190,50 @@ function updateHistoryList() {
   });
 }
 
-// 设置事件监听器
+// 事件处理函数
+function handleBodyClick(e) {
+  if (e.target === historyBtn) {
+    historyModal.style.display = 'block';
+  } else if (e.target === closeBtn) {
+    historyModal.style.display = 'none';
+  } else if (e.target === closeUserInfoBtn) {
+    userInfoModal.style.display = 'none';
+  } else if (e.target === userInfoBtn) {
+    import('./account.js').then(module => module.showUserInfo()).catch(err => console.error('无法加载用户信息:', err));
+  } else if (e.target === historyModal || e.target === userInfoModal) {
+    historyModal.style.display = 'none';
+    userInfoModal.style.display = 'none';
+  }
+}
+
+// 初始化聊天事件
+let chatEventsInitialized = false;
+
 function initChatEvents() {
-  if (historyBtn) historyBtn.addEventListener('click', () => historyModal.style.display = 'block');
-  if (closeBtn) closeBtn.addEventListener('click', () => historyModal.style.display = 'none');
-  if (closeUserInfoBtn) closeUserInfoBtn.addEventListener('click', () => userInfoModal.style.display = 'none');
+  if (chatEventsInitialized) return;
+  chatEventsInitialized = true;
+
+  document.body.addEventListener('click', handleBodyClick);
   if (sendBtn) sendBtn.addEventListener('click', sendMessage);
-  if (userInfoBtn) {
-    userInfoBtn.addEventListener('click', () => {
-      // 从account.js导入的showUserInfo函数
-      import('./account.js').then(module => {
-        module.showUserInfo();
-      }).catch(err => {
-        console.error('无法加载用户信息:', err);
-      });
-    });
-  }
-
-  if (input) {
-    input.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
-      }
-    });
-  }
-
-  // 点击模态框外部关闭
-  window.addEventListener('click', (event) => {
-    if (event.target === historyModal || event.target === userInfoModal) {
-      historyModal.style.display = 'none';
-      userInfoModal.style.display = 'none';
+  if (input) input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
     }
   });
+}
+
+// 清理聊天事件
+function removeChatEvents() {
+  document.body.removeEventListener('click', handleBodyClick);
+  if (sendBtn) sendBtn.removeEventListener('click', sendMessage);
+  if (input) input.removeEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+  chatEventsInitialized = false;
 }
 
 // 确保DOM已加载
@@ -233,4 +244,4 @@ if (document.readyState === 'loading') {
 }
 
 // 导出函数
-export { appendMessage, sendMessage, initChatEvents };
+export { appendMessage, sendMessage, initChatEvents, removeChatEvents };
