@@ -54,4 +54,6 @@ function initTheme() {
 }
 
 // 导出函数
-export { setTheme, initTheme };
+// 浏览器兼容
+window.setTheme = setTheme;
+window.initTheme = initTheme;

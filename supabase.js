@@ -1,44 +1,12 @@
-// 模拟Supabase客户端
-const mockSupabase = {
-  auth: {
-    signInWithPassword: async ({ email, password }) => {
-      if (email && password && password.length >= 8) {
-        return {
-          data: {
-            user: {
-              id: 'mock-user-id',
-              email: email,
-              user_metadata: { name: email.split('@')[0] }
-            }
-          },
-          error: null
-        }
-      }
-      throw new Error('登录失败')
-    },
-    signUp: async ({ email, password }) => {
-      return {
-        data: {
-          user: {
-            id: 'mock-user-id',
-            email: email,
-            user_metadata: { name: email.split('@')[0] }
-          }
-        },
-        error: null
-      }
-    },
-    signOut: async () => ({ error: null }),
-    getSession: async () => ({ data: { session: null }, error: null }),
-    getUser: async () => ({ data: { user: null }, error: null }),
-    resend: async ({ email }) => ({ error: null })
-  },
-  from: (tableName) => ({
-    insert: async (data) => {
-      console.log(`Mock insert to ${tableName}:`, data)
-      return { data: null, error: null }
-    }
-  })
-}
+// 确保在定义函数前初始化 Supabase 客户端
+const supabaseUrl = 'https://sfathljcqvsqtazfcohb.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmYXRobGpjcXZzcXRhemZjb2hiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQzNzYxNTAsImV4cCI6MjA2OTk1MjE1MH0.e0h04FnSKOnoPDDVU1LqpgpofT5mJiym1QrB1NFZfQ4';
 
-export default mockSupabase
+// 直接使用window.supabase对象，假设它已经在index.html中正确初始化
+// 现在定义安全访问方法
+function getSupabase() {
+  if (!window.supabase) {
+    throw new Error("Supabase client not available");
+  }
+  return window.supabase;
+}

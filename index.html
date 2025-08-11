@@ -6,6 +6,7 @@
   <title>智能聊天系统</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="styles.css">
+
 </head>
 <body>
   <!-- 主题切换按钮 -->
@@ -102,6 +103,26 @@
 
   <!-- 聊天页面 -->
   <div id="chatPage">
+    <!-- 添加右侧智能体按钮容器 -->
+    <div class="agent-buttons-container">
+      <button id="newPageBtn" title="英文翻译老师">
+        <i class="fas fa-language"></i>
+        <span>英文翻译老师</span>
+      </button>
+      <button id="newPageBtn2" title="知心大姐姐">
+        <i class="fas fa-file-alt"></i>
+        <span>知心大姐姐</span>
+      </button>
+      <button id="newPageBtn3" title="诗仙李白">
+        <i class="fas fa-file"></i>
+        <span>诗仙李白</span>
+      </button>
+      <button id="newPageBtn4" title="自定义智能体">
+        <i class="fas fa-file-code"></i>
+        <span>自定义智能体</span>
+      </button>
+    </div>
+
     <div class="card">
       <div class="header">
         <h1>智能聊天助手</h1>
@@ -118,46 +139,71 @@
         </div>
       </div>
       
-      <div id="app">
-        <div id="chat">
-          <div class="message bot">
-            <img src="https://i.ibb.co/sdFXFR26/favicon-2.jpg" alt="机器人头像" class="avatar">
-            <div class="message-content">
-              您好！我是您的智能助手，请问有什么可以帮助您的吗？
+      <!-- 添加聊天布局容器 -->
+      <div class="chat-layout">
+        <!-- 左侧历史记录栏 -->
+        <div class="history-sidebar">
+          <div class="sidebar-header">
+            <h3>聊天记录</h3>
+            <div class="history-controls-sidebar">
+              <input type="text" id="searchInputSidebar" placeholder="搜索记录...">
+              <button id="refreshHistoryBtnSidebar" class="refresh-btn-sidebar">
+                <i class="fas fa-sync-alt"></i>
+              </button>
             </div>
           </div>
+          <div id="historyListSidebar" class="history-items"></div>
         </div>
-        <div class="loader" id="loader">
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
-        <div class="input-container">
-          <textarea id="input" placeholder="请输入您的问题..."></textarea>
-          <button id="pauseBtn" title="暂停响应"></button>
-          <button id="sendBtn" title="发送"></button>
+        
+        <!-- 右侧聊天主区域 -->
+        <div class="chat-main">
+          <div id="app">
+            <div id="chat">
+              <div class="message bot">
+                <img src="https://img.alicdn.com/imgextra/i2/2208363280/O1CN01rvsx7P1PDb31vU1fb_!!2208363280.png" alt="机器人头像" class="avatar">
+                <div class="message-content">
+                  您好！我是您的智能助手，请问有什么可以帮助您的吗？
+                </div>
+              </div>
+            </div>
+            <div class="loader" id="loader">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <div class="input-container">
+              <textarea id="input" placeholder="请输入您的问题..."></textarea>
+              <button id="pauseBtn" title="暂停响应"></button>
+              <button id="sendBtn" title="发送"></button>
+              <div class="voice-controls">
+                <button class="voice-btn" id="startVoice">
+                  <i class="fas fa-microphone"></i>
+                </button>
+                <!-- 添加文件上传按钮 -->
+                <button class="voice-btn" id="uploadBtn" title="上传文件">
+                  <i class="fas fa-file-upload"></i>
+                </button>
+                <input type="file" id="fileInput" accept=".txt,.docx,.pdf" style="display: none;">
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- 历史记录模态框 -->
+  <!-- 历史记录模态框 (保持不变，以防需要回退) -->
   <div id="historyModal" class="modal">
     <div class="modal-content">
       <span class="close-btn">&times;</span>
       <h2>对话历史</h2>
-      <div id="historyList">
-        <div class="history-item">
-          <div class="history-time">2025-10-20 14:30</div>
-          <div class="history-question">问: 什么是人工智能？</div>
-          <div class="history-answer">答: 人工智能是计算机科学的一个分支，旨在创造能够模拟人类智能行为的机器。</div>
-        </div>
-        <div class="history-item">
-          <div class="history-time">2025-10-19 09:15</div>
-          <div class="history-question">问: 如何学习编程？</div>
-          <div class="history-answer">答: 学习编程可以从基础语言如Python开始，逐步学习数据结构、算法和项目实践。</div>
-        </div>
+      <div class="history-controls">
+        <input type="text" id="searchInput" placeholder="输入关键词搜索">
+        <button id="refreshHistoryBtn" class="refresh-btn">
+          <i class="fas fa-sync-alt"></i> 刷新
+        </button>
       </div>
+      <div id="historyList"></div>
     </div>
   </div>
   
@@ -165,53 +211,87 @@
   <div id="userInfoModal" class="modal">
     <div class="modal-content">
       <span class="close-btn close-user-info">&times;</span>
-      <div class="user-info-header">
-        <img src="https://randomuser.me/api/portraits/men/32.jpg" alt="用户头像" class="user-avatar">
-        <div class="user-details">
-          <div class="user-name">张先生</div>
-          <div class="user-account" id="userAccountDisplay">12345678901</div>
-        </div>
-      </div>
-      
-      <div class="info-grid">
-        <div class="info-card">
-          <i class="fas fa-comments"></i>
-          <div class="info-title">对话总数</div>
-          <div class="info-value">128</div>
-        </div>
-        
-        <div class="info-card">
-          <i class="fas fa-clock"></i>
-          <div class="info-title">活跃天数</div>
-          <div class="info-value">42</div>
-        </div>
-      </div>
-      
+      <h2>用户信息</h2>
+
+      <!-- 个人信息编辑区 - 移到前面 -->
       <div class="user-stats">
-        <h3>账号信息</h3>
         <div class="stat-item">
-          <span class="stat-label">注册日期</span>
-          <span class="stat-value">2025-08-15</span>
+          <div class="stat-label"><i class="fas fa-user-edit"></i> 用户名</div>
+          <input type="text" id="userNameInput" class="stat-value" />
         </div>
         <div class="stat-item">
-          <span class="stat-label">最后登录</span>
-          <span class="stat-value">2025-10-20</span>
+          <div class="stat-label"><i class="fas fa-envelope"></i> 邮箱</div>
+          <div class="stat-value" id="userEmailDisplay"></div>
         </div>
         <div class="stat-item">
-          <span class="stat-label">账号状态</span>
-          <span class="stat-value" style="color: #4CAF50;">正常</span>
-        </div>
-        <div class="stat-item">
-          <span class="stat-label">安全等级</span>
-          <span class="stat-value">高</span>
+          <div class="stat-label"><i class="fas fa-image"></i> 头像</div>
+          <div class="stat-value">
+            <img id="avatarImg" src="https://img.alicdn.com/imgextra/i2/2208363280/O1CN01rvsx7P1PDb31vU1fb_!!2208363280.png" alt="头像" class="small-avatar" />
+            <input type="file" id="avatarUpload" accept="image/*" style="margin-top: 10px;" />
+          </div>
         </div>
       </div>
+
+      <!-- 统计信息区 - 减小占位 -->
+      <div class="info-grid compact">
+        <div class="info-card small">
+          <i class="fas fa-calendar-alt"></i>
+          <div class="info-title">注册时间</div>
+          <div class="info-value" id="regDate"></div>
+        </div>
+        <div class="info-card small">
+          <i class="fas fa-comments"></i>
+          <div class="info-title">对话数</div>
+          <div class="info-value" id="conversationCount"></div>
+        </div>
+        <div class="info-card small">
+          <i class="fas fa-calendar-check"></i>
+          <div class="info-title">登录次数</div>
+          <div class="info-value" id="activeDays"></div>
+        </div>
+      </div>
+
+      <button id="saveUserInfoBtn" class="submit-btn" style="margin-top: 30px;">保存</button>
     </div>
   </div>
 
-  <!-- Supabase CDN - 暂时移除以测试基础功能 -->
-  <!-- <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script> -->
-  <!-- 仅加载主入口模块 -->
-  <script type="module" src="app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- 初始化 Supabase 客户端 -->
+  <script>
+    const SUPABASE_URL = 'https://sfathljcqvsqtazfcohb.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmYXRobGpjcXZzcXRhemZjb2hiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQzNzYxNTAsImV4cCI6MjA2OTk1MjE1MH0.e0h04FnSKOnoPDDVU1LqpgpofT5mJiym1QrB1NFZfQ4';
+    
+    // 等待Supabase库加载完成后再初始化
+    function initSupabase() {
+      if (typeof supabase !== 'undefined' && typeof supabase.createClient === 'function') {
+        // 全局定义supabase对象
+        window.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        console.log('Supabase client initialized successfully');
+      } else {
+        console.error('Supabase library not loaded correctly or createClient method not available');
+        // 如果初始化失败，稍后重试
+        setTimeout(initSupabase, 1000);
+      }
+    }
+    
+    // 页面加载完成后初始化Supabase
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initSupabase);
+    } else {
+      initSupabase();
+    }
+  </script>
+  
+  <!-- 3. 然后加载其他依赖Supabase的脚本 -->
+  <script src="supabase.js"></script>
+  <script src="account.js"></script>
+  <script src="chat.js"></script>
+  <script src="app.js"></script>
+  <script src="reset-password.js"></script>
+  <script src="strength-meter.js"></script>
+  <script src="theme.js"></script>
+  <!-- 引入文档解析库 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
 </body>
 </html>

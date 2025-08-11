@@ -3,14 +3,24 @@ function validateEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-// 获取DOM元素
-const newPasswordInput = document.getElementById('newPassword');
-const confirmNewPasswordInput = document.getElementById('confirmNewPassword');
-const strengthMeter = document.getElementById('strengthMeter');
-const resetPasswordBtn = document.getElementById('resetPasswordBtn');
+let newPasswordInput, confirmNewPasswordInput, strengthMeter, resetPasswordBtn;
 
-// 密码强度检测
-newPasswordInput.addEventListener('input', function() {
+// 初始化元素函数
+function initializeElements() {
+  newPasswordInput = document.getElementById('newPassword');
+  confirmNewPasswordInput = document.getElementById('confirmNewPassword');
+  strengthMeter = document.getElementById('strengthMeter');
+  resetPasswordBtn = document.getElementById('resetPasswordBtn');
+}
+
+// 在DOM加载完成后初始化元素和事件监听器
+function initResetPasswordPage() {
+  initializeElements();
+  
+  // 检查元素是否存在
+  if (newPasswordInput && strengthMeter) {
+    // 密码强度检测
+    newPasswordInput.addEventListener('input', function() {
   const password = this.value;
   let strength = 0;
   
@@ -41,10 +51,21 @@ newPasswordInput.addEventListener('input', function() {
   } else {
     strengthMeter.style.background = '#2ecc71';
   }
-});
+    });
+  }
+}
 
-// 重置密码功能
-resetPasswordBtn.addEventListener('click', async function() {
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initResetPasswordPage);
+} else {
+  initResetPasswordPage();
+}
+  
+  
+  // 检查重置密码按钮是否存在
+  if (resetPasswordBtn) {
+    // 重置密码功能
+    resetPasswordBtn.addEventListener('click', async function() {
   const password = newPasswordInput.value;
   const confirmPassword = confirmNewPasswordInput.value;
   
@@ -114,3 +135,4 @@ if (document.readyState === 'loading') {
 } else {
   initResetPasswordEvents();
 }
+  }

@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>自定义智能体对话</title>
+<style>
+/* 基础样式优化 */
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+#app {
+  height: 100%;
+  width: 100%;
+  max-width: 100vw;
+  max-height: 100vh;
+  background: white;
+  padding: 20px;
+  border-radius: 16px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+#app::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #007bff, #00bcd4);
+}
+
+/* 标签样式 */
+label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #4a5568;
+  font-size: 0.9em;
+}
+
+/* 聊天框优化 */
+#chat {
+  flex:1;
+  height: 300px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  padding: 15px;
+  border-radius: 12px;
+  background: #f8fafc;
+  margin-bottom: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+#chatPage {
+  display: block; /* 打开聊天页面 */
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100vh;
+  background: white;
+  overflow: hidden; /* 防止溢出 */
+  border-radius: 0;
+  box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+  margin: 0 auto;
+  z-index: 9999;
+}
+
+.message {
+  display: flex;
+  gap: 10px;
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* 用户消息样式 */
+.user {
+  align-self: flex-end;
+}
+
+/* 机器人消息样式 */
+.bot {
+  align-self: flex-start;
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.user .avatar {
+  background: #007bff;
+  color: white;
+}
+
+.bot .avatar {
+  background: #4a5568;
+  color: white;
+}
+
+.message-content {
+  max-width: 80%;
+  padding: 12px 15px;
+  border-radius: 18px;
+  line-height: 1.5;
+  position: relative;
+  box-shadow: 0 3px 6px rgba(0,0,0,0.05);
+}
+
+.user .message-content {
+  background: #007bff;
+  color: white;
+  border-bottom-right-radius: 5px;
+}
+
+.bot .message-content {
+  background: #edf2f7;
+  color: #2d3748;
+  border-bottom-left-radius: 5px;
+}
+
+.timestamp {
+  font-size: 0.7em;
+  color: #a0aec0;
+  margin-top: 4px;
+  text-align: right;
+}
+
+.message-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 5px;
+  font-weight: 500;
+  font-size: 0.85em;
+}
+
+.user .message-header {
+  color: #e6f0fa;
+}
+
+.bot .message-header {
+  color: #4a5568;
+}
+
+h1 {
+  font-size: 1.6em;
+  margin-bottom: 20px;
+  text-align: center;
+  color: #2c3e50;
+  position: relative;
+  padding-bottom: 10px;
+}
+
+h1::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 25%;
+  width: 50%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #007bff, transparent);
+}
+
+/* 输入控件样式 */
+input, textarea, select {
+  width: 100%;
+  padding: 12px 15px;
+  font-size: 1em;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  transition: all 0.3s ease;
+  margin-bottom: 15px;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.03);
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 3px rgba(0,123,255,0.15);
+}
+
+textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+/* 按钮样式优化 */
+button {
+  padding: 12px 18px;
+  font-size: 1em;
+  font-weight: 500;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.08);
+}
+
+#sendBtn {
+  background-color: #007bff;
+  color: white;
+}
+
+#sendBtn:hover:not(:disabled) {
+  background-color: #0069d9;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 10px rgba(0,0,0,0.12);
+}
+
+button:disabled {
+  background-color: #a0aec0;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* 行布局样式 */
+.row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.row button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+#agentSelect {
+  flex: 1;
+}
+
+/* 智能体表单样式 */
+#agentForm {
+  margin-bottom: 15px;
+  background: #f9fafb;
+  padding: 15px;
+  border-radius: 12px;
+  border: 1px dashed #cbd5e0;
+}
+
+.form-title {
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #2d3748;
+  font-size: 1.1em;
+}
+
+/* 添加新智能体按钮 */
+.add-btn {
+  background: #edf2f7;
+  color: #2d3748;
+  padding: 10px;
+  font-size: 1.2em;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.add-btn:hover {
+  background: #e2e8f0;
+  transform: rotate(90deg);
+}
+
+/* 加载指示器 */
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 15px;
+  font-style: italic;
+  color: #718096;
+}
+
+.typing-dots {
+  display: flex;
+  gap: 4px;
+  margin-left: 8px;
+}
+
+.typing-dot {
+  width: 8px;
+  height: 8px;
+  background: #a0aec0;
+  border-radius: 50%;
+  animation: bounce 1.4s infinite ease-in-out both;
+}
+
+.typing-dot:nth-child(1) { animation-delay: -0.32s; }
+.typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+/* 滚动条样式 */
+#chat::-webkit-scrollbar {
+  width: 8px;
+}
+
+#chat::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+#chat::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+#chat::-webkit-scrollbar-thumb:hover {
+  background: #a0aec0;
+}
+
+/* 动画定义 */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes bounce {
+  0%, 80%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-10px); }
+}
+
+/* 响应式设计 */
+@media (max-width: 480px) {
+  #app {
+    padding: 15px;
+  }
+  
+  .message-content {
+    max-width: 75%;
+  }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>自定义智能体对话</h1>
+  <!-- 添加返回按钮 -->
+  <button id="backToChat" style="margin-bottom: 15px; background-color:#f1f5f9;color:#4a5568;">
+    <i class="fas fa-arrow-left"></i> 返回聊天页面
+  </button>
+  
+  <label>选择智能体</label>
+  <div class="row">
+    <select id="agentSelect"></select>
+    <button class="add-btn" onclick="showAgentForm()">➕</button>
+  </div>
+  
+  <div id="agentForm" style="display:none;">
+    <div class="form-title">创建新智能体</div>
+    <input type="text" id="agentName" placeholder="智能体名称">
+    <textarea id="agentPrompt" placeholder="智能体系统提示词（人格/背景设定）"></textarea>
+    <div class="row">
+      <button onclick="saveAgent()">保存</button>
+      <button onclick="cancelAgentForm()">取消</button>
+    </div>
+  </div>
+  
+  <div id="chat"></div>
+  <textarea id="input" placeholder="请输入您的问题..."></textarea>
+  <button id="sendBtn">
+    <span>发送</span>
+    <span id="loadingIcon" style="display:none;">...</span>
+  </button>
+  <button id="clearBtn" onclick="clearChat()" style="margin-top: 10px; background-color:#f1f5f9;color:#4a5568;">清除聊天</button>
+</div>
+  
+<script>
+  const chat = document.getElementById('chat'); 
+  const input = document.getElementById('input');
+  const sendBtn = document.getElementById('sendBtn');
+  const agentSelect = document.getElementById('agentSelect');
+  const loadingIcon = document.getElementById('loadingIcon');
+  
+  const API_KEY = "sk-22c0d14edbc44bb387114294798dfb63";
+  const API_URL = "https://api.deepseek.com/v1/chat/completions";
+  
+  // 读取本地存储的智能体
+  function loadAgents() {
+    return JSON.parse(localStorage.getItem('agents') || '[]');
+  }
+  
+  function saveAgents(agents) {
+    localStorage.setItem('agents', JSON.stringify(agents));
+    renderAgentOptions();
+  }
+  
+  function renderAgentOptions() {
+    const agents = loadAgents();
+    agentSelect.innerHTML = '';
+    
+    if (agents.length === 0) {
+      const opt = document.createElement('option');
+      opt.textContent = "请创建您的第一个智能体";
+      opt.disabled = true;
+      agentSelect.appendChild(opt);
+      return;
+    }
+    
+    agents.forEach((a, i) => {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = a.name;
+      agentSelect.appendChild(opt);
+    });
+  }
+  
+  // UI 控制
+  function showAgentForm() {
+    document.getElementById('agentForm').style.display = 'block';
+    document.getElementById('agentName').focus();
+  }
+   
+  function cancelAgentForm() {
+    document.getElementById('agentForm').style.display = 'none';
+    document.getElementById('agentName').value = '';
+    document.getElementById('agentPrompt').value = '';
+  }
+   
+  function saveAgent() {
+    const name = document.getElementById('agentName').value.trim();
+    const prompt = document.getElementById('agentPrompt').value.trim();
+    
+    if (!name) return alert("请填写智能体名称");
+    if (!prompt) return alert("请填写系统提示词");
+    
+    const agents = loadAgents();
+    
+    // 检查名称是否已经存在
+    if(agents.some(a => a.name === name)) {
+      return alert("该名称已存在，请使用不同的名称");
+    }
+    
+    agents.push({ name, prompt });
+    saveAgents(agents);
+    
+    // 切换到新创建的智能体
+    agentSelect.value = agents.length - 1;
+    
+    cancelAgentForm();
+  }
+  
+  // 获取当前时间
+  function getCurrentTime() {
+    const now = new Date();
+    return now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+  }
+
+  // 消息气泡样式增强 
+  function appendMessage(sender, text) { 
+    const msgDiv = document.createElement('div'); 
+    msgDiv.classList.add('message'); 
+    msgDiv.classList.add(sender === 'user' ? 'user' : 'bot'); 
+    
+    // 添加头像 
+    const avatarDiv = document.createElement('div'); 
+    avatarDiv.classList.add('avatar'); 
+    avatarDiv.textContent = sender === 'user' ? '你' : 'AI'; 
+    msgDiv.appendChild(avatarDiv); 
+    
+    // 创建消息内容容器 
+    const contentDiv = document.createElement('div'); 
+    contentDiv.classList.add('message-content'); 
+    
+    // 添加消息头（发件人和时间） 
+    const headerDiv = document.createElement('div'); 
+    headerDiv.classList.add('message-header'); 
+    
+    const agents = loadAgents(); 
+    const agentName = agents.length > 0 && sender !== 'user' ? agents[agentSelect.value].name : '你'; 
+    headerDiv.innerHTML = `<span>${agentName}</span><span>${getCurrentTime()}</span>`; 
+    contentDiv.appendChild(headerDiv); 
+    
+    // 添加消息内容 
+    const textDiv = document.createElement('div'); 
+    textDiv.classList.add('message-text'); 
+    textDiv.textContent = text; 
+    contentDiv.appendChild(textDiv); 
+    
+    msgDiv.appendChild(contentDiv); 
+    chat.appendChild(msgDiv); 
+    chat.scrollTop = chat.scrollHeight; 
+  } 
+
+  // 显示正在输入状态 
+  function showTypingIndicator() { 
+    const typingDiv = document.createElement('div'); 
+    typingDiv.classList.add('typing-indicator'); 
+    typingDiv.id = 'typingIndicator'; 
+    
+    typingDiv.innerHTML = ` 
+      <span>思考中</span> 
+      <div class="typing-dots"> 
+        <div class="typing-dot"></div> 
+        <div class="typing-dot"></div> 
+        <div class="typing-dot"></div> 
+      </div> 
+    `; 
+    
+    chat.appendChild(typingDiv); 
+    chat.scrollTop = chat.scrollHeight; 
+  } 
+  
+  // 隐藏正在输入状态 
+  function hideTypingIndicator() { 
+    const typingIndicator = document.getElementById('typingIndicator'); 
+    if(typingIndicator) { 
+      typingIndicator.remove(); 
+    } 
+  } 
+
+  async function sendMessage() { 
+    const text = input.value.trim(); 
+    const agents = loadAgents(); 
+    
+    if (agents.length === 0) { 
+      alert("请先创建一个智能体"); 
+      showAgentForm(); 
+      return; 
+    } 
+    
+    if (!text) return; 
+    
+    const selectedAgent = agents[agentSelect.value]; 
+    
+    appendMessage('user', text); 
+    input.value = ''; 
+    sendBtn.disabled = true; 
+    loadingIcon.style.display = 'inline'; 
+    input.style.opacity = '0.7'; 
+    input.disabled = true; 
+    
+    // 显示正在输入 
+    showTypingIndicator(); 
+    
+    try { 
+      const response = await fetch(API_URL, { 
+        method: 'POST', 
+        headers: { 
+          'Content-Type': 'application/json', 
+          'Authorization': `Bearer ${API_KEY}` 
+        }, 
+        body: JSON.stringify({ 
+          model: "deepseek-chat", 
+          messages: [ 
+            { role: "system", content: selectedAgent.prompt }, 
+            { role: "user", content: text } 
+          ], 
+          temperature: 0.7, 
+          max_tokens: 2000 
+        }) 
+      }); 
+  
+      if (!response.ok) throw new Error(`请求失败: HTTP ${response.status}`); 
+      
+      const data = await response.json(); 
+      const reply = data.choices?.[0]?.message?.content || '无回复内容'; 
+      
+      hideTypingIndicator(); 
+      appendMessage('bot', reply); 
+  
+    } catch (error) { 
+      hideTypingIndicator(); 
+      appendMessage('bot', `错误: ${error.message}`); 
+      console.error('API请求错误:', error); 
+    } finally { 
+      sendBtn.disabled = false; 
+      loadingIcon.style.display = 'none'; 
+      input.disabled = false; 
+      input.style.opacity = '1'; 
+      input.focus(); 
+    } 
+  } 
+
+  // 清除聊天记录 
+  function clearChat() { 
+    chat.innerHTML = ''; 
+  } 
+
+  // 初始化事件监听器 
+  function initEventListeners() { 
+    sendBtn.addEventListener('click', sendMessage); 
+    // 添加返回按钮事件
+    document.getElementById('backToChat').addEventListener('click', function() {
+      window.location.href = 'index.html?show=chat';
+    });
+    
+    document.getElementById('saveBtn').addEventListener('click', saveAgent); 
+    
+    input.addEventListener('keydown', e => { 
+      if (e.key === 'Enter' && !e.shiftKey) { 
+        e.preventDefault(); 
+        sendMessage(); 
+      } 
+    }); 
+  } 
+
+  // 初始化示例智能体 
+  function initSampleAgents() { 
+    const agents = loadAgents(); 
+    
+    if(agents.length === 0) { 
+      const sampleAgents = [ 
+        { 
+          name: "技术助手", 
+          prompt: "你是一个专业的编程助手，精通多种编程语言，能够帮助用户解决各类技术问题。" 
+        }, 
+        { 
+          name: "创意写作伙伴", 
+          prompt: "你是一位创意作家，擅长写小说、诗歌和剧本，帮助用户克服创作障碍并激发创意。" 
+        } 
+      ]; 
+      
+      localStorage.setItem('agents', JSON.stringify(sampleAgents)); 
+    } 
+  } 
+
+  // 添加窗口加载完成后的最大化设置
+  window.addEventListener('load', function() {
+    // 确保页面加载完成后再执行
+    setTimeout(function() {
+      // 检查是否已经是最大化状态
+      if (!document.fullscreenElement) {
+        // 尝试进入全屏
+        document.documentElement.requestFullscreen().catch(err => {
+          console.log(`全屏请求错误: ${err.message}`);
+        });
+      }
+    }, 500);
+  });
+
+  // 监听全屏状态变化
+  document.addEventListener('fullscreenchange', function() {
+    if (document.fullscreenElement) {
+      console.log('进入全屏模式');
+      // 全屏时移除边框圆角，增强沉浸式体验
+      document.getElementById('app').style.borderRadius = '0';
+    } else {
+      console.log('退出全屏模式');
+      // 非全屏时恢复边框圆角
+      document.getElementById('app').style.borderRadius = '16px';
+      // 如果用户退出全屏，尝试重新进入
+      setTimeout(function() {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(err => {
+            console.log(`全屏请求错误: ${err.message}`);
+          });
+        }
+      }, 1000);
+    }
+  });
+
+  // 初始化应用
+  function initApp() {
+    initSampleAgents();
+    renderAgentOptions();
+    initEventListeners();
+    
+    // 添加示例对话
+    setTimeout(() => {
+      appendMessage('bot', '您好！我是您的AI助手，欢迎使用智能体对话系统。请从上方选择或创建您想要的智能体类型开始对话。');
+    }, 500);
+  }
+
+  // 页面加载完成后初始化应用
+  document.addEventListener('DOMContentLoaded', initApp);
+</script>
+</body>
+</html>
