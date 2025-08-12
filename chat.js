@@ -370,16 +370,6 @@ function typeWriterEffect(text, elementId, speed = 50) {
   }, speed);
 }
 
-// 辅助：安全转义 HTML（避免 innerHTML 的 XSS 问题） 
-function escapeHtml(str) { 
-  return str 
-    .replace(/&/g, "&amp;") 
-    .replace(/</g, "&lt;") 
-    .replace(/>/g, "&gt;") 
-    .replace(/"/g, "&quot;") 
-    .replace(/'/g, "&#39;"); 
-} 
-
 // 添加消息
 function appendMessage(sender, text) {
   // 创建消息容器
@@ -404,39 +394,7 @@ function appendMessage(sender, text) {
   const contentDiv = document.createElement('div');
   contentDiv.classList.add('message-content');
   contentDiv.id = 'message-' + Date.now();
-  
-  // 规范换行符（兼容 Windows / Mac / Linux）
-  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-
-  if (sender === 'user') {
-    // 只有确实包含换行符时，才把换行显式转换为 <br>
-    if (normalized.includes('\n')) {
-      const rawLines = normalized.split('\n');
-      // 合并连续空行（若你想保留多个空行可以调整）
-      const lines = [];
-      let prevBlank = false;
-      for (let line of rawLines) {
-        const isBlank = line.trim().length === 0;
-        if (isBlank) {
-          if (!prevBlank) { // 只保留一个空行
-            lines.push('');
-            prevBlank = true;
-          }
-        } else {
-          lines.push(line);
-          prevBlank = false;
-        }
-      }
-      // 转义每行并用 <br> 连接
-      contentDiv.innerHTML = lines.map(l => escapeHtml(l)).join('<br>');
-    } else {
-      // 单行短文本 —— 使用 textContent，避免被当作 HTML，同时不会插入不必要的换行
-      contentDiv.textContent = normalized;
-    }
-  } else {
-    // 机器人消息：保留原始文本（若需要打字机效果可另处理）
-    contentDiv.textContent = text;
-  }
+  contentDiv.textContent = text;
 
   // 组装消息元素
   msgDiv.appendChild(avatarImg);
@@ -707,49 +665,202 @@ function initFileUpload() {
 }
 
 // 修复文档解析逻辑（handleFile函数）
-async function handleFile(event) {
-  const file = event.target.files[0];
-  if (!file) return;
+/* ---------- 修改 handleFile：图片分支直接使用 parseImage，识别后展示并调用 analyzeText ---------- */
+async function handleFile(event) { 
+   const file = event.target.files[0]; 
+   if (!file) return; 
 
-  // 添加文件类型验证
-  const validTypes = ['text/plain', 'application/pdf', 
-                      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-  if (!validTypes.includes(file.type)) {
-    alert('仅支持 TXT、PDF 和 DOCX 格式');
-    return;
+   const validTypes = [ 
+     'text/plain', 'application/pdf', 
+     'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 
+     'image/jpeg', 'image/png', 'image/gif' 
+   ]; 
+   if (!validTypes.includes(file.type)) { 
+     alert('仅支持 TXT、PDF、DOCX 和图片格式'); 
+     return; 
+   } 
+
+   const fileName = file.name; 
+
+   // 统一添加用户上传提示消息，所有文件类型都适用 
+   appendMessage('user', `请识别文件：${fileName}`); 
+    
+   // 如果是图片，进行OCR识别 
+   if (file.type.startsWith('image/')) { 
+     appendMessage('bot', '🖼 正在识别图片文字，请稍候...'); 
+
+     try { 
+       const { data: { text } } = await Tesseract.recognize(file, 'chi_sim', { 
+         logger: m => console.log(m) // 显示进度 
+       }); 
+
+       const recognizedText = text.trim(); 
+       if (!recognizedText) { 
+         appendMessage('bot', '⚠️ 未识别到文字'); 
+         return; 
+       } 
+
+       // 保存到 document_analysis 表 
+       const { data: userData, error: userError } = await supabase.auth.getUser(); 
+       if (userError || !userData?.user) { 
+         appendMessage('bot', '⚠️ 未登录，无法保存到云端'); 
+       } else { 
+         const { error } = await supabase 
+           .from('document_analysis') 
+           .insert([{ 
+             user_id: userData.user.id, 
+             file_name: fileName, 
+             file_content: recognizedText, 
+             analysis_result: '', 
+             created_at: new Date().toISOString() 
+           }]); 
+
+         if (error) { 
+           console.error('保存失败:', error); 
+           appendMessage('bot', '❌ 保存到数据库失败'); 
+         } else { 
+           appendMessage('bot', `✅ 已保存 OCR 结果到云端 (${recognizedText.length} 字)`); 
+         } 
+       } 
+
+       // 设置文件上下文并分析文本 
+       window.chatState.lastFileContext = recognizedText; 
+       await analyzeText(recognizedText, fileName, 'single'); 
+
+     } catch (err) { 
+       console.error('OCR 出错:', err); 
+       appendMessage('bot', '❌ 图片识别失败'); 
+     } 
+     return; 
+   } 
+
+   // 其它类型文件处理逻辑... 
+   const reader = new FileReader();
+    reader.onload = async function(e) {
+      try {
+        appendMessage('bot', '正在识别文件...');
+        let text = e.target.result;
+        if (file.type === 'application/pdf') {
+          text = await parsePDF(file);
+        } else if (file.type.includes('openxml')) {
+          text = await parseDOCX(file);
+        } else if (file.type === 'text/plain') {
+          // e.target.result 为 ArrayBuffer -> 转为 text
+          const decoder = new TextDecoder('utf-8');
+          text = decoder.decode(e.target.result);
+        }
+        window.chatState.lastFileContext = text.substring(0, 2000);
+        await analyzeText(text, fileName, 'single');
+      } catch (error) {
+        console.error('文件处理失败:', error);
+        appendMessage('bot', `❌ 文件解析失败: ${error.message}`);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+/* ---------- 预处理：将图片缩放 + 灰度化，输出 Blob ---------- */
+async function preprocessImage(file, maxWidth = 1600) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        // 按比例缩放（避免过大或过小）
+        const scale = Math.min(1, maxWidth / img.width);
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+
+        // 获取像素并转换为灰度（提高 OCR 效果）
+        try {
+          const imageData = ctx.getImageData(0, 0, w, h);
+          const d = imageData.data;
+          for (let i = 0; i < d.length; i += 4) {
+            const r = d[i], g = d[i+1], b = d[i+2];
+            const v = 0.299*r + 0.587*g + 0.114*b; // 灰度
+            // 增强对比（简单线性扩展）
+            const enhanced = Math.min(255, Math.max(0, (v - 30) * 1.2 + 30));
+            d[i] = d[i+1] = d[i+2] = enhanced;
+          }
+          ctx.putImageData(imageData, 0, 0);
+        } catch (err) {
+          // Safari 有时会限制 getImageData（跨域）。如果失败则跳过预处理。
+          console.warn('canvas.getImageData 失败，跳过像素处理：', err);
+        }
+
+        canvas.toBlob(blob => {
+          if (!blob) return reject(new Error('toBlob 返回空'));
+          resolve(blob);
+        }, 'image/png', 0.95);
+      } catch (err) {
+        reject(err);
+      } finally {
+        URL.revokeObjectURL(img.src);
+      }
+    };
+    img.onerror = (e) => reject(new Error('图片加载失败'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+/* ---------- 使用 Tesseract 的 createWorker 做 OCR（稳健 & 可报告进度） ---------- */
+async function parseImage(file, lang = 'chi_sim') {
+  if (!window.Tesseract) {
+    throw new Error('Tesseract.js 未加载，请在 HTML 中引入 tesseract.js');
   }
 
-  // +++ 新增: 在分析前发送一条用户消息 +++
-  const fileName = file.name;
-  const uploadMessage = `请分析文件：${fileName}`;
-  
-  // 使用appendMessage发送用户消息，但不保存到历史记录
-  appendUploadMessage(uploadMessage);
+  // +++ 添加文件有效性检查 +++
+  if (!file || typeof file.name === 'undefined') {
+    throw new Error('无效的文件对象');
+  }
 
-  const reader = new FileReader();
-  reader.onload = async function(e) {
-    try {
-      let text = e.target.result;
-      
-      // 特殊格式处理
-      if (file.type === 'application/pdf') {
-        text = await parsePDF(file); // 专用PDF解析函数
-      } else if (file.type.includes('openxml')) {
-        text = await parseDOCX(file); // 专用DOCX解析函数
+  // +++ 确保文件名有扩展名 +++
+  if (!file.name.includes('.')) {
+    // 如果没有扩展名，添加默认扩展名
+    file = new File([file], file.name + '.png', { type: file.type || 'image/png' });
+  }
+
+
+  // 有 createWorker 的优先走 worker 流程（更稳定）
+  if (Tesseract.createWorker) {
+    const worker = Tesseract.createWorker({
+      logger: m => {
+        // m.progress (0..1), m.status 字符串
+        console.log('Tesseract:', m);
+        // 可扩展：把识别进度展示在页面 loader 上
+        // e.g. document.getElementById('ocrProgress').style.width = (m.progress*100)+'%';
       }
-      
-      // 存储解析结果到临时上下文
-      window.chatState.lastFileContext = text.substring(0, 2000); // 限制长度
-      
-      // 始终使用单文件模式
-      await analyzeText(text, fileName, 'single');
-      
-    } catch (error) {
-      console.error('文件处理失败:', error);
-      appendMessage('bot', `❌ 文件解析失败: ${error.message}`);
-    }
-  };
-  reader.readAsArrayBuffer(file); // 统一使用ArrayBuffer读取
+    });
+
+    await worker.load();
+    await worker.loadLanguage(lang).catch(async (e) => {
+      console.warn('loadLanguage 失败，尝试使用 eng:', e);
+      await worker.loadLanguage('eng');
+      lang = 'eng';
+    });
+    await worker.initialize(lang);
+
+    // 预处理并识别（传入 Blob）
+    const processedBlob = await preprocessImage(file);
+    const { data: { text } } = await worker.recognize(processedBlob);
+    await worker.terminate();
+    return text || '';
+  }
+
+  // 旧接口回退
+  if (Tesseract.recognize) {
+    const processedBlob = await preprocessImage(file);
+    const res = await Tesseract.recognize(processedBlob, lang, { logger: m => console.log(m) });
+    return (res && res.data && res.data.text) ? res.data.text : '';
+  }
+
+  throw new Error('浏览器中 Tesseract API 不支持 createWorker/recognize');
 }
 
 // +++ 新增函数: 专门处理文件上传消息 +++

@@ -6,6 +6,8 @@
   <title>智能聊天系统</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="styles.css">
+  <!-- tesseract.js v2/v3/v4 都支持 createWorker；如果用 v5 请确保用对应用法 -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@2.1.5/dist/tesseract.min.js"></script>
 
 </head>
 <body>
@@ -160,7 +162,7 @@
           <div id="app">
             <div id="chat">
               <div class="message bot">
-                <img src="https://img.alicdn.com/imgextra/i2/2208363280/O1CN01rvsx7P1PDb31vU1fb_!!2208363280.png" alt="机器人头像" class="avatar">
+                <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAlWVYSWZNTQAqAAAACAAEAQAAAwAAAAEFJwAAAQEAAwAAAAEElgAAh2kABAAAAAEAAAA+ARIAAwAAAAEAAQAAAAAAAAACkoYAAgAAAA8AAABckggABAAAAAEAAAAAAAAAAE9wbHVzXzE2OTA4Mjg4AAADvElEQVRYCe2XS2sTQRSGHyUhohJBghBpUuLIHtghgUpkNSQPqg6NRNw6cOHCxWfgQrVShfQX/Ai/gQIv4UWrZWs2Kixv01T9qjKoa9n5vL1l3dn95X8nNvrxkLzUIIYQQQvhxq3wLwAwgVdyusx9UBvSDVhWQTlQFKvejlWf8iCeMOypJdFh9cz1kHckm/wWFdn1DE9FcISiqDKcBNRRGdrho3hV1l7GVbNMYJcFiabPSl4G45t45thTLVf6B6B3wGgA4At1utw4bWIhj/0Vq1F7nqwADtDdoFxFzjcU26KDM4z3cNqNd30A5GLP5m6wF6JY5t6RZFlKItAF1hDQqCqUEZEvU4oJcHkF4zQQaL2tsWe8pPeYdMkqKhq6Z2kVJggdBUnVaQbUN4CzoYOg5nd7T7gC8gA3W2u4U6YMrJbHz5SKvhBqVmbEoMZgO9gnzCzRrLBGa8ALXIpn9C9nyJElPlH6uIfrwPsGtlk7YcwCDM/vJwSuWx11jt3RYA91iDqpv+TK5xzOBo64y49k2jQMe07A3HZjFbZ4A+msTKLgRRoYtkixM2VbBiXJSZ3FsAamNImf1gFZ9TIKAZ3KzOIoF6mjAqlUlgqUnbMuTFeuAa7sGlIYZlI3NcdjAqPQWYZFhxSDgCMXGIrj6dgC5KXGFpQkhxKHYSKx4rRkOcFjbQx8RIaTfH6DFIF9XAkxV2V/wB6hBnylUwwYBvmBPo2FxepuM5noEOGaX5R2U7gLNeG8Ox05sIfQ93yPgei8gwDNb+0AtXyq9kgTA2Zd6VGHYIRvAKTEm4uUypT7gTuyNGRDo3yY26Y9Z4WqK+wGS8WkMr7qdifJ9bQPSiE+tUAl5TgqbH/wYmvHoEYXBA1pbgqf3UGa3n1ja6Xnfnok0W3yeiW6OvmKy3OqXjPgvnNkR+FPKfKwbxSWvwAAAABJRU5ErkJggg==" alt="机器人头像" class="avatar">
                 <div class="message-content">
                   您好！我是您的智能助手，请问有什么可以帮助您的吗？
                 </div>
@@ -183,7 +185,7 @@
                 <button class="voice-btn" id="uploadBtn" title="上传文件">
                   <i class="fas fa-file-upload"></i>
                 </button>
-                <input type="file" id="fileInput" accept=".txt,.docx,.pdf" style="display: none;">
+                <input type="file" id="fileInput" accept=".txt,.docx,.pdf,.jpg,.jpeg,.png,.gif" style="display: none;">
               </div>
             </div>
           </div>
@@ -226,7 +228,7 @@
         <div class="stat-item">
           <div class="stat-label"><i class="fas fa-image"></i> 头像</div>
           <div class="stat-value">
-            <img id="avatarImg" src="https://img.alicdn.com/imgextra/i2/2208363280/O1CN01rvsx7P1PDb31vU1fb_!!2208363280.png" alt="头像" class="small-avatar" />
+            <img id="avatarImg" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAlWVYSWZNTQAqAAAACAAEAQAAAwAAAAEFJwAAAQEAAwAAAAEElgAAh2kABAAAAAEAAAA+ARIAAwAAAAEAAQAAAAAAAAACkoYAAgAAAA8AAABckggABAAAAAEAAAAAAAAAAE9wbHVzXzE2OTA4Mjg4AAADvElEQVRYCe2XS2sTQRSGHyUhohJBghBpUuLIHtghgUpkNSQPqg6NRNw6cOHCxWfgQrVShfQX/Ai/gQIv4UWrZWs2Kixv01T9qjKoa9n5vL1l3dn95X8nNvrxkLzUIIYQQQvhxq3wLwAwgVdyusx9UBvSDVhWQTlQFKvejlWf8iCeMOypJdFh9cz1kHckm/wWFdn1DE9FcISiqDKcBNRRGdrho3hV1l7GVbNMYJcFiabPSl4G45t45thTLVf6B6B3wGgA4At1utw4bWIhj/0Vq1F7nqwADtDdoFxFzjcU26KDM4z3cNqNd30A5GLP5m6wF6JY5t6RZFlKItAF1hDQqCqUEZEvU4oJcHkF4zQQaL2tsWe8pPeYdMkqKhq6Z2kVJggdBUnVaQbUN4CzoYOg5nd7T7gC8gA3W2u4U6YMrJbHz5SKvhBqVmbEoMZgO9gnzCzRrLBGa8ALXIpn9C9nyJElPlH6uIfrwPsGtlk7YcwCDM/vJwSuWx11jt3RYA91iDqpv+TK5xzOBo64y49k2jQMe07A3HZjFbZ4A+msTKLgRRoYtkixM2VbBiXJSZ3FsAamNImf1gFZ9TIKAZ3KzOIoF6mjAqlUlgqUnbMuTFeuAa7sGlIYZlI3NcdjAqPQWYZFhxSDgCMXGIrj6dgC5KXGFpQkhxKHYSKx4rRkOcFjbQx8RIaTfH6DFIF9XAkxV2V/wB6hBnylUwwYBvmBPo2FxepuM5noEOGaX5R2U7gLNeG8Ox05sIfQ93yPgei8gwDNb+0AtXyq9kgTA2Zd6VGHYIRvAKTEm4uUypT7gTuyNGRDo3yY26Y9Z4WqK+wGS8WkMr7qdifJ9bQPSiE+tUAl5TgqbH/wYmvHoEYXBA1pbgqf3UGa3n1ja6Xnfnok0W3yeiW6OvmKy3OqXjPgvnNkR+FPKfKwbxSWvwAAAABJRU5ErkJggg==" alt="头像" class="small-avatar" />
             <input type="file" id="avatarUpload" accept="image/*" style="margin-top: 10px;" />
           </div>
         </div>

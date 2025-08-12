@@ -410,7 +410,7 @@ h1 {
   margin-bottom: 15px;
   display: flex;
   align-items: flex-start;
-  max-width: 90%;
+  max-width: 100%;
 }
 
 .user {
@@ -432,16 +432,12 @@ h1 {
 }
 
 .message-content {
-  max-width: 80%;
+  max-width: 100%;
   padding: 12px 16px;
   border-radius: 18px;
   line-height: 1.5;
   box-shadow: 0 2px 5px rgba(0,0,0,0.08);
   word-wrap: break-word;
-  /* 尊重用户换行（但不会把短词随意拆开） */
-  white-space: pre-wrap;        /* 保留换行与多空格的展示，但允许换行折行 */
-  word-break: normal;          /* 不要使用 break-all */
-  overflow-wrap: break-word;   /* 对很长的单词才进行合理换行，防止溢出 */
 }
 
 .user { order: 2; }
@@ -500,7 +496,7 @@ h1 {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  max-width: 80%;
+  max-width: 100%;
 }
 
 /* 搜索模式样式 */
