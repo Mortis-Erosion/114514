@@ -341,6 +341,49 @@ body {
   overflow-y: auto;
 }
 
+/* 添加在历史记录样式部分 */
+.history-export {
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.export-btn-sidebar {
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.3s;
+}
+
+.export-btn-sidebar:hover {
+  background-color: #45a049;
+  transform: translateY(-2px);
+}
+
+/* 主题适配 */
+body.dark-theme .export-btn-sidebar {
+  background-color: #4CAF50;
+}
+
+body.dark-theme .export-btn-sidebar:hover {
+  background-color: #45a049;
+}
+
+body.eye-theme .export-btn-sidebar {
+  background-color: #4CAF50;
+}
+
+body.eye-theme .export-btn-sidebar:hover {
+  background-color: #45a049;
+}
+
 /* 聊天主区域样式 */
 .chat-main {
   flex: 1;
@@ -1498,6 +1541,30 @@ body.eye-theme .refresh-btn:hover {
 
 #chat::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
+}
+
+/* 添加兼容性前缀 */
+.some-class {
+  /* 对于 touch-action */
+  -ms-touch-action: manipulation;
+  touch-action: manipulation; /* 添加标准属性支持 Firefox 52+, Safari 13+ */
+
+  /* 对于 user-select */
+  -webkit-user-select: none;
+  user-select: none; /* 添加标准属性支持其他浏览器 */
+
+  /* 对于 user-drag */
+  -webkit-user-drag: none;
+  /* Firefox 不支持 user-drag，保持原样 */
+
+  /* 对于 text-size-adjust */
+  -ms-text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%; /* 添加标准属性 */
+
+  /* 对于 background-clip */
+  -webkit-background-clip: text;
+  background-clip: text; /* 确保标准属性在私有属性之后 */
 }
 
 /* 在文档3的CSS中添加以下样式 */

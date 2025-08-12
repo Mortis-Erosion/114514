@@ -328,7 +328,15 @@ window.CHAT_CONFIG = {
   USER_AVATAR: "https://your-project-ref.supabase.co/storage/v1/object/public/avatars/Default%20avatar.jpg",
   BOT_AVATAR: "https://i.ibb.co/sdFXFR26/favicon-2.jpg",
   API_KEY: "sk-22c0d14edbc44bb387114294798dfb63",
-  API_URL: "https://api.deepseek.com/v1/chat/completions"
+  API_URL: "https://api.deepseek.com/v1/chat/completions",
+  // 添加火山引擎API配置
+  VOLC_API_KEY: "39c5c9e6-6c54-417d-8375-db2d5f756d46",
+  VOLC_API_URL: "https://ark.cn-beijing.volces.com/api/v3/chat/completions",
+  VOLC_MODEL: "doubao-1-5-pro-256k-250115",
+  // 添加Kimi API配置
+  KIMI_API_KEY: "39c5c9e6-6c54-417d-8375-db2d5f756d46",
+  KIMI_API_URL: "https://ark.cn-beijing.volces.com/api/v3/chat/completions",
+  KIMI_MODEL: "kimi-k2-250711"
 };
 
 // 状态变量
@@ -339,7 +347,9 @@ window.chatState = {
   pauseResponse: false,
   lastUserMessage: '',
   contextHistory: [], // 新增上下文存储
-  lastFileContext: '' // 保存最近的文件分析结果
+  lastFileContext: '', // 保存最近的文件分析结果
+  abortController: null, // 新增：用于停止API请求
+  typeWriterTimer: null   // 新增：用于停止打字机效果
 };
 
 // 打字机效果函数
@@ -349,22 +359,36 @@ function typeWriterEffect(text, elementId, speed = 50) {
     console.error(`元素 ${elementId} 不存在`);
     return;
   }
-
+  
+  // 清除之前的定时器
+  if (window.chatState.typeWriterTimer) {
+    clearInterval(window.chatState.typeWriterTimer);
+    window.chatState.typeWriterTimer = null;
+  }
+  
+  // 存储完整文本以便停止时使用
+  window.chatState.currentTypeWriterText = text;
+  window.chatState.currentTypeWriterElement = el;
+  
   el.innerHTML = '';
   let i = 0;
 
-  const timer = setInterval(() => {
+  window.chatState.typeWriterTimer = setInterval(() => {
     try {
       if (i < text.length) {
         el.innerHTML += text.charAt(i);
         i++;
       } else {
-        clearInterval(timer);
+        clearInterval(window.chatState.typeWriterTimer);
+        window.chatState.typeWriterTimer = null;
+        window.chatState.currentTypeWriterElement = null;
         window.chatElements.chat.scrollTop = window.chatElements.chat.scrollHeight;
       }
     } catch (error) {
       console.error('打字机效果出错:', error);
-      clearInterval(timer);
+      clearInterval(window.chatState.typeWriterTimer);
+      window.chatState.typeWriterTimer = null;
+      window.chatState.currentTypeWriterElement = null;
       el.textContent = text;
     }
   }, speed);
@@ -477,6 +501,12 @@ function appendMessage(sender, text) {
       }
     }, text.length * 50);
   }
+  
+  // 如果是机器人消息，重置停止状态
+  if (sender === 'bot') {
+    window.chatState.typeWriterTimer = null;
+    window.chatState.currentTypeWriterElement = null;
+  }
 }
 
 // 保存对话记录到Supabase
@@ -522,71 +552,147 @@ async function sendMessage() {
   }
 
   const fullUserContent = `${context}\n\n用户问题：${text}`;
-  
+
   // 添加用户消息到上下文
   window.chatState.contextHistory.push({ role: "user", content: fullUserContent });
-  
+
   // 添加系统提示
   window.chatState.contextHistory.push({ 
     role: "system", 
     content: "你是一个乐于助人的AI助手，使用中文回答用户问题" 
   });
-  
+
   window.chatState.lastUserMessage = text;
   appendMessage('user', text);
-  
+
   window.chatElements.input.value = '';
   window.chatElements.sendBtn.disabled = true;
   window.chatElements.pauseBtn.disabled = false;
-  
+
   window.chatElements.loader.style.display = 'flex';
   window.chatState.isLoading = true;
   window.chatState.pauseResponse = false;
   window.chatElements.pauseBtn.style.backgroundColor = '#6c757d';
   window.chatElements.pauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
-  
+
+  // 创建AbortController用于停止请求
+  window.chatState.abortController = new AbortController();
+
   try {
-    const response = await fetch(window.CHAT_CONFIG.API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${window.CHAT_CONFIG.API_KEY}`
-      },
-      body: JSON.stringify({
-        model: "deepseek-chat",
-        messages: window.chatState.contextHistory, // 发送完整上下文
+    // 获取选择的API
+    const apiSelect = document.getElementById('apiSelect');
+    const selectedApi = apiSelect ? apiSelect.value : 'deepseek';
+
+    let apiUrl, apiKey, model, requestBody;
+
+    // 根据选择的API设置不同的参数
+    if (selectedApi === 'kimi') {
+      apiUrl = window.CHAT_CONFIG.KIMI_API_URL;
+      apiKey = window.CHAT_CONFIG.KIMI_API_KEY;
+      model = window.CHAT_CONFIG.KIMI_MODEL;
+      requestBody = {
+        model: model,
+        messages: window.chatState.contextHistory,
         temperature: 0.7,
         max_tokens: 2000
-      })
-    });
-    
+      };
+    } else if (selectedApi === 'volcengine') {
+      apiUrl = window.CHAT_CONFIG.VOLC_API_URL;
+      apiKey = window.CHAT_CONFIG.VOLC_API_KEY;
+      model = window.CHAT_CONFIG.VOLC_MODEL;
+      requestBody = {
+        model: model,
+        messages: window.chatState.contextHistory,
+        temperature: 0.7,
+        max_tokens: 2000
+      };
+    } else {
+      // 默认使用DeepSeek
+      apiUrl = window.CHAT_CONFIG.API_URL;
+      apiKey = window.CHAT_CONFIG.API_KEY;
+      model = 'deepseek-chat'; // DeepSeek默认模型
+      requestBody = {
+        model: model,
+        messages: window.chatState.contextHistory,
+        temperature: 0.7,
+        max_tokens: 2000
+      };
+    }
+
+    // 发送请求
+    const response = await fetch(apiUrl,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify(requestBody),
+        signal: window.chatState.abortController.signal
+      });
+
     if (!response.ok) {
       throw new Error(`请求失败: HTTP ${response.status}`);
     }
-    
+
     const data = await response.json();
     const reply = data.choices?.[0]?.message?.content || '无回复内容';
-    
+
     // 添加助手回复到上下文
     window.chatState.contextHistory.push({ role: "assistant", content: reply });
-    
+
     // 控制上下文长度（保留最近5轮对话）
     if (window.chatState.contextHistory.length > 10) {
       window.chatState.contextHistory.splice(0, 2);
     }
-    
+
     appendMessage('bot', reply);
     await saveChatRecord(window.chatState.lastUserMessage, reply);
   } catch (error) {
-    appendMessage('bot', `API请求错误: ${error.message}`);
-    console.error('API请求错误:', error);
-    await saveChatRecord(window.chatState.lastUserMessage, `API请求错误: ${error.message}`);
+    if (error.name === 'AbortError') {
+      appendMessage('bot', '思考已停止');
+    } else {
+      appendMessage('bot', `API请求错误: ${error.message}`);
+      console.error('API请求错误:', error);
+      await saveChatRecord(window.chatState.lastUserMessage, `API请求错误: ${error.message}`);
+    }
   } finally {
+    window.chatState.abortController = null;
     window.chatElements.loader.style.display = 'none';
     window.chatElements.sendBtn.disabled = false;
     window.chatElements.input.focus();
     window.chatState.isLoading = false;
   }
+}
+
+// 创建停止思考函数
+function stopThinking() {
+  // 1. 停止API请求
+  if (window.chatState.abortController) {
+    window.chatState.abortController.abort();
+  }
+  
+  // 2. 停止打字机效果
+  if (window.chatState.typeWriterTimer) {
+    clearInterval(window.chatState.typeWriterTimer);
+    window.chatState.typeWriterTimer = null;
+    
+    // 直接显示完整文本
+    if (window.chatState.currentTypeWriterElement) {
+      window.chatState.currentTypeWriterElement.textContent = 
+        window.chatState.currentTypeWriterText;
+      window.chatState.currentTypeWriterElement = null;
+    }
+  }
+  
+  // 3. 停止语音播报
+  if (window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+  }
+  
+  // 4. 重置UI状态
+  window.chatElements.loader.style.display = 'none';
+  window.chatState.isLoading = false;
 }
 
 // 更新历史记录列表
@@ -638,7 +744,9 @@ function handleBodyClick(e) {
   } else if (e.target === window.chatElements.newPageBtn3 || e.target.parentNode === window.chatElements.newPageBtn3) {
     window.open('blank1.html', '_blank');
   } else if (e.target === window.chatElements.newPageBtn4 || e.target.parentNode === window.chatElements.newPageBtn4) {
-    window.open('blank2.html', '_blank');
+    // 移除原代码：window.open('blank2.html', '_blank');
+    // 添加新代码
+    loadCustomAgentInPage();
   } else if (e.target === window.chatElements.historyModal || e.target === window.chatElements.userInfoModal) {
     window.chatElements.historyModal.style.display = 'none';
     window.chatElements.userInfoModal.style.display = 'none';
@@ -1067,6 +1175,11 @@ function initChatEvents() {
   window.chatElements.newPageBtn3 = document.getElementById('newPageBtn3');
   window.chatElements.newPageBtn4 = document.getElementById('newPageBtn4');
 
+    // 添加API选择器元素
+    window.chatElements.apiSelect = document.getElementById('apiSelect');
+  // 添加API选择器元素
+  window.chatElements.apiSelect = document.getElementById('apiSelect');
+
   // 添加语音识别初始化
   initVoiceRecognition();
   initVoiceToggle(); // 添加语音开关初始化
@@ -1085,18 +1198,7 @@ function initChatEvents() {
   }
   
   if (window.chatElements.pauseBtn) {
-    window.chatElements.pauseBtn.addEventListener('click', function() {
-      window.chatState.pauseResponse = !window.chatState.pauseResponse;
-      if (window.chatState.pauseResponse) {
-        this.style.backgroundColor = '#ffc107';
-        this.setAttribute('title', '继续响应');
-        this.innerHTML = '<i class="fas fa-play"></i>';
-      } else {
-        this.style.backgroundColor = '#6c757d';
-        this.setAttribute('title', '暂停响应');
-        this.innerHTML = '<i class="fas fa-pause"></i>';
-      }
-    });
+    window.chatElements.pauseBtn.addEventListener('click', stopThinking);
   }
   
   initFileUpload();
@@ -1142,6 +1244,371 @@ function addResetButton() {
   
   // 添加到输入区域
   document.querySelector('.input-container').prepend(resetBtn);
+}
+
+// 加载自定义智能体到当前页面
+function loadCustomAgentInPage() {
+  console.log('loadCustomAgentInPage 函数被调用');
+  // 创建覆盖层容器
+  const overlay = document.createElement('div');
+  overlay.id = 'customAgentOverlay';
+  overlay.style.position = 'fixed';
+  overlay.style.top = '0';
+  overlay.style.left = '0';
+  overlay.style.width = '100%';
+  overlay.style.height = '100%';
+  overlay.style.backgroundColor = 'white';
+  overlay.style.zIndex = '9999';
+  overlay.style.display = 'flex';
+  overlay.style.flexDirection = 'column';
+  overlay.style.padding = '20px';
+
+  // 创建返回按钮
+  const backBtn = document.createElement('button');
+  backBtn.id = 'backToChatFromAgent';
+  backBtn.innerHTML = '<i class="fas fa-arrow-left"></i> 返回聊天';
+  backBtn.style.marginBottom = '20px';
+  backBtn.style.backgroundColor = '#f1f5f9';
+  backBtn.style.color = '#4a5568';
+  backBtn.style.padding = '10px 15px';
+  backBtn.style.border = 'none';
+  backBtn.style.borderRadius = '5px';
+  backBtn.style.cursor = 'pointer';
+  backBtn.addEventListener('click', function() {
+    document.body.removeChild(overlay);
+  });
+
+  overlay.appendChild(backBtn);
+
+  // 创建加载指示器
+  const loader = document.createElement('div');
+  loader.className = 'loader';
+  loader.innerHTML = '<span></span><span></span><span></span>';
+  loader.style.margin = 'auto';
+  overlay.appendChild(loader);
+
+  // 添加到页面
+  document.body.appendChild(overlay);
+  console.log('覆盖层已添加到页面');
+
+  // 使用绝对路径加载 blank2.html 内容
+  const baseUrl = window.location.origin;
+  const blank2Url = `${baseUrl}/blank2.html`;
+  console.log('开始加载 blank2.html，URL:', blank2Url);
+
+  fetch(blank2Url)
+    .then(response => {
+      console.log('blank2.html 加载响应状态:', response.status);
+      if (!response.ok) {
+        throw new Error(`HTTP 错误! 状态码: ${response.status}`);
+      }
+      return response.text();
+    })
+    .then(html => {
+      console.log('blank2.html 加载成功，HTML 长度:', html.length);
+      // 打印前50个字符，查看是否正确加载
+      console.log('HTML 内容预览:', html.substring(0, 50) + '...');
+      
+      // 创建一个临时容器来解析 HTML
+      const tempContainer = document.createElement('div');
+      tempContainer.innerHTML = html;
+
+      // 提取 body 内容
+      // 修改选择器为更简单的 #app
+      const bodyContent = tempContainer.querySelector('#app');
+      console.log('是否找到 #app 元素:', !!bodyContent);
+      if (bodyContent) {
+        // 清空覆盖层
+        overlay.innerHTML = '';
+        overlay.appendChild(backBtn);
+        overlay.appendChild(bodyContent);
+
+        // 调整样式
+        bodyContent.style.width = '100%';
+        bodyContent.style.height = 'calc(100% - 60px)';
+        bodyContent.style.maxWidth = '100%';
+        bodyContent.style.maxHeight = 'calc(100% - 60px)';
+
+        // 重新初始化脚本
+        console.log('开始初始化自定义智能体脚本');
+        initCustomAgentScripts(bodyContent);
+      } else {
+        console.error('未找到 #app 元素');
+        // 列出所有子元素，帮助调试
+        const bodyChildren = tempContainer.querySelector('body')?.children;
+        console.log('body 子元素数量:', bodyChildren?.length);
+        if (bodyChildren) {
+          Array.from(bodyChildren).forEach(child => {
+            console.log('body 子元素:', child.tagName, child.id);
+          });
+        }
+        overlay.innerHTML = '<h2>加载失败: 未找到必要的页面元素</h2>';
+        overlay.appendChild(backBtn);
+      }
+    })
+    .catch(error => {
+      console.error('加载自定义智能体失败:', error);
+      overlay.innerHTML = `<h2>加载失败: ${error.message}</h2>`;
+      overlay.appendChild(backBtn);
+    });
+}
+
+// 初始化自定义智能体所需的脚本
+function initCustomAgentScripts(container) {
+  // 这里需要重新实现 blank2.html 中的脚本功能
+  // 由于安全原因，直接使用 eval 不是最佳实践，但为了简单起见，我们可以提取关键功能
+
+  const chat = container.querySelector('#chat');
+  const input = container.querySelector('#input');
+  const sendBtn = container.querySelector('#sendBtn');
+  const agentSelect = container.querySelector('#agentSelect');
+  const loadingIcon = container.querySelector('#loadingIcon');
+
+  // 读取本地存储的智能体
+  function loadAgents() {
+    return JSON.parse(localStorage.getItem('agents') || '[]');
+  }
+
+  function saveAgents(agents) {
+    localStorage.setItem('agents', JSON.stringify(agents));
+    renderAgentOptions();
+  }
+
+  function renderAgentOptions() {
+    const agents = loadAgents();
+    agentSelect.innerHTML = '';
+
+    if (agents.length === 0) {
+      const opt = document.createElement('option');
+      opt.textContent = "请创建您的第一个智能体";
+      opt.disabled = true;
+      agentSelect.appendChild(opt);
+      return;
+    }
+
+    agents.forEach((a, i) => {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = a.name;
+      agentSelect.appendChild(opt);
+    });
+  }
+
+  // 显示智能体表单
+  container.querySelector('.add-btn')?.addEventListener('click', function() {
+    container.querySelector('#agentForm').style.display = 'block';
+    container.querySelector('#agentName').focus();
+  });
+
+  // 取消智能体表单
+  container.querySelector('button[onclick="cancelAgentForm()"]')?.addEventListener('click', function() {
+    container.querySelector('#agentForm').style.display = 'none';
+    container.querySelector('#agentName').value = '';
+    container.querySelector('#agentPrompt').value = '';
+  });
+
+  // 保存智能体
+  container.querySelector('button[onclick="saveAgent()"]')?.addEventListener('click', function() {
+    const name = container.querySelector('#agentName').value.trim();
+    const prompt = container.querySelector('#agentPrompt').value.trim();
+
+    if (!name) return alert("请填写智能体名称");
+    if (!prompt) return alert("请填写系统提示词");
+
+    const agents = loadAgents();
+
+    // 检查名称是否已经存在
+    if(agents.some(a => a.name === name)) {
+      return alert("该名称已存在，请使用不同的名称");
+    }
+
+    agents.push({ name, prompt });
+    saveAgents(agents);
+
+    // 切换到新创建的智能体
+    agentSelect.value = agents.length - 1;
+
+    container.querySelector('#agentForm').style.display = 'none';
+    container.querySelector('#agentName').value = '';
+    container.querySelector('#agentPrompt').value = '';
+  });
+
+  // 清除聊天记录
+  container.querySelector('#clearBtn')?.addEventListener('click', function() {
+    chat.innerHTML = '';
+  });
+
+  // 获取当前时间
+  function getCurrentTime() {
+    const now = new Date();
+    return now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+  }
+
+  // 消息气泡样式增强
+  function appendMessage(sender, text) {
+    const msgDiv = document.createElement('div');
+    msgDiv.classList.add('message');
+    msgDiv.classList.add(sender === 'user' ? 'user' : 'bot');
+
+    // 添加头像
+    const avatarDiv = document.createElement('div');
+    avatarDiv.classList.add('avatar');
+    avatarDiv.textContent = sender === 'user' ? '你' : 'AI';
+    msgDiv.appendChild(avatarDiv);
+
+    // 创建消息内容容器
+    const contentDiv = document.createElement('div');
+    contentDiv.classList.add('message-content');
+
+    // 添加消息头（发件人和时间）
+    const headerDiv = document.createElement('div');
+    headerDiv.classList.add('message-header');
+
+    const agents = loadAgents();
+    const agentName = agents.length > 0 && sender !== 'user' ? agents[agentSelect.value].name : '你';
+    headerDiv.innerHTML = `<span>${agentName}</span><span>${getCurrentTime()}</span>`;
+    contentDiv.appendChild(headerDiv);
+
+    // 添加消息内容
+    const textDiv = document.createElement('div');
+    textDiv.classList.add('message-text');
+    textDiv.textContent = text;
+    contentDiv.appendChild(textDiv);
+
+    msgDiv.appendChild(contentDiv);
+    chat.appendChild(msgDiv);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  // 显示正在输入状态
+  function showTypingIndicator() {
+    const typingDiv = document.createElement('div');
+    typingDiv.classList.add('typing-indicator');
+    typingDiv.id = 'typingIndicator';
+
+    typingDiv.innerHTML = `
+      <span>思考中</span>
+      <div class="typing-dots">
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+      </div>
+    `;
+
+    chat.appendChild(typingDiv);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  // 隐藏正在输入状态
+  function hideTypingIndicator() {
+    const typingIndicator = document.getElementById('typingIndicator');
+    if(typingIndicator) {
+      typingIndicator.remove();
+    }
+  }
+
+  // 发送消息
+  async function sendMessage() {
+    const text = input.value.trim();
+    const agents = loadAgents();
+
+    if (agents.length === 0) {
+      alert("请先创建一个智能体");
+      container.querySelector('#agentForm').style.display = 'block';
+      container.querySelector('#agentName').focus();
+      return;
+    }
+
+    if (!text) return;
+
+    const selectedAgent = agents[agentSelect.value];
+
+    appendMessage('user', text);
+    input.value = '';
+    sendBtn.disabled = true;
+    loadingIcon.style.display = 'inline';
+    input.style.opacity = '0.7';
+    input.disabled = true;
+
+    // 显示正在输入
+    showTypingIndicator();
+
+    try {
+      const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer sk-22c0d14edbc44bb387114294798dfb63`
+        },
+        body: JSON.stringify({
+          model: "deepseek-chat",
+          messages: [
+            { role: "system", content: selectedAgent.prompt },
+            { role: "user", content: text }
+          ],
+          temperature: 0.7,
+          max_tokens: 2000
+        })
+      });
+
+      if (!response.ok) throw new Error(`请求失败: HTTP ${response.status}`);
+
+      const data = await response.json();
+      const reply = data.choices?.[0]?.message?.content || '无回复内容';
+
+      hideTypingIndicator();
+      appendMessage('bot', reply);
+
+    } catch (error) {
+      hideTypingIndicator();
+      appendMessage('bot', `错误: ${error.message}`);
+      console.error('API请求错误:', error);
+    } finally {
+      sendBtn.disabled = false;
+      loadingIcon.style.display = 'none';
+      input.disabled = false;
+      input.style.opacity = '1';
+      input.focus();
+    }
+  }
+
+  // 添加事件监听器
+  sendBtn.addEventListener('click', sendMessage);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  // 初始化示例智能体
+  function initSampleAgents() {
+    const agents = loadAgents();
+
+    if(agents.length === 0) {
+      const sampleAgents = [
+        {
+          name: "技术助手",
+          prompt: "你是一个专业的编程助手，精通多种编程语言，能够帮助用户解决各类技术问题。"
+        },
+        {
+          name: "创意写作伙伴",
+          prompt: "你是一位创意作家，擅长写小说、诗歌和剧本，帮助用户克服创作障碍并激发创意。"
+        }
+      ];
+
+      localStorage.setItem('agents', JSON.stringify(sampleAgents));
+    }
+  }
+
+  // 初始化应用
+  initSampleAgents();
+  renderAgentOptions();
+
+  // 添加示例对话
+  setTimeout(() => {
+    appendMessage('bot', '您好！我是您的AI助手，欢迎使用智能体对话系统。请从上方选择或创建您想要的智能体类型开始对话。');
+  }, 500);
 }
 
 // 向量计算核心
@@ -1348,6 +1815,61 @@ function refreshHistory() {
   }
 }
 
+// 导出历史记录到CSV
+async function exportHistoryToCSV() {
+  try {
+    // 确保Supabase已初始化
+    if (!window.supabase) {
+      console.error('Supabase not initialized');
+      return;
+    }
+    
+    // 获取当前用户
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      alert('请先登录');
+      return;
+    }
+    
+    // 从Supabase获取历史记录
+    const { data: records, error } = await supabase
+      .from('conversations')
+      .select('created_at, user_message, assistant_message')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    
+    if (!records || records.length === 0) {
+      alert('没有历史记录可导出');
+      return;
+    }
+    
+    // 构造CSV内容
+    let csvContent = '时间,用户消息,助手消息\n';
+    records.forEach(record => {
+      const time = record.created_at ? new Date(record.created_at).toLocaleString() : '';
+      const userMsg = record.user_message ? `"${record.user_message.replace(/"/g, '"')}"` : '';
+      const assistantMsg = record.assistant_message ? `"${record.assistant_message.replace(/"/g, '"')}"` : '';
+      csvContent += `${time},${userMsg},${assistantMsg}\n`;
+    });
+    
+    // 创建Blob并下载
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `聊天记录_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } catch (error) {
+    console.error('导出历史记录失败:', error);
+    alert('导出失败: ' + error.message);
+  }
+}
+
 // 初始化历史记录侧边栏
 function initHistorySidebar() {
   document.getElementById('historyBtn').style.display = 'none';
@@ -1360,6 +1882,12 @@ function initHistorySidebar() {
   document.getElementById('refreshHistoryBtnSidebar').addEventListener('click', function() {
     loadHistoryToSidebar();
   });
+  
+  // 添加导出按钮事件
+  const exportHistoryBtn = document.getElementById('exportHistoryBtn');
+  if (exportHistoryBtn) {
+    exportHistoryBtn.addEventListener('click', exportHistoryToCSV);
+  }
 }
 
 // 加载历史记录到侧边栏

@@ -9,6 +9,40 @@
   <!-- tesseract.js v2/v3/v4 都支持 createWorker；如果用 v5 请确保用对应用法 -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@2.1.5/dist/tesseract.min.js"></script>
 
+  <!-- 添加自定义智能体所需的样式 -->
+  <style>
+    .loader {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .loader span {
+      width: 10px;
+      height: 10px;
+      margin: 0 5px;
+      border-radius: 50%;
+      background-color: #3498db;
+      animation: pulse 1.4s infinite ease-in-out both;
+    }
+    .loader span:nth-child(1) { animation-delay: -0.32s; }
+    .loader span:nth-child(2) { animation-delay: -0.16s; }
+    @keyframes pulse {
+      0%, 80%, 100% { transform: scale(0); }
+      40% { transform: scale(1); }
+    }
+    /* API选择器样式 */
+    .api-selector {
+      margin-left: 10px;
+      display: inline-block;
+    }
+    #apiSelect {
+      padding: 5px 10px;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+      background-color: white;
+      font-size: 14px;
+    }
+  </style>
 </head>
 <body>
   <!-- 主题切换按钮 -->
@@ -138,6 +172,15 @@
           <button id="logoutBtn" title="退出登录">
             <i class="fas fa-sign-out-alt"></i>
           </button>
+          <!-- 添加API选择器 -->
+          <!-- 添加API选择器 -->
+          <div class="api-selector">
+            <select id="apiSelect">
+              <option value="deepseek">DeepSeek API</option>
+              <option value="volcengine">火山引擎API</option>
+              <option value="kimi">Kimi API</option>
+            </select>
+          </div>
         </div>
       </div>
       
@@ -147,6 +190,12 @@
         <div class="history-sidebar">
           <div class="sidebar-header">
             <h3>聊天记录</h3>
+            <!-- 添加导出按钮 -->
+            <div class="history-export">
+              <button id="exportHistoryBtn" class="export-btn-sidebar">
+                <i class="fas fa-download"></i> 导出
+              </button>
+            </div>
             <div class="history-controls-sidebar">
               <input type="text" id="searchInputSidebar" placeholder="搜索记录...">
               <button id="refreshHistoryBtnSidebar" class="refresh-btn-sidebar">
@@ -185,7 +234,7 @@
                 <button class="voice-btn" id="uploadBtn" title="上传文件">
                   <i class="fas fa-file-upload"></i>
                 </button>
-                <input type="file" id="fileInput" accept=".txt,.docx,.pdf,.jpg,.jpeg,.png,.gif" style="display: none;">
+                <input type="file" id="fileInput" accept=".txt,.docx,.pdf,.jpg,.jpeg,.png,.gif" style="display: none;" title="选择要上传的文件">
               </div>
             </div>
           </div>
@@ -219,7 +268,7 @@
       <div class="user-stats">
         <div class="stat-item">
           <div class="stat-label"><i class="fas fa-user-edit"></i> 用户名</div>
-          <input type="text" id="userNameInput" class="stat-value" />
+          <input type="text" id="userNameInput" class="stat-value" placeholder="请输入用户名" />
         </div>
         <div class="stat-item">
           <div class="stat-label"><i class="fas fa-envelope"></i> 邮箱</div>
@@ -229,7 +278,7 @@
           <div class="stat-label"><i class="fas fa-image"></i> 头像</div>
           <div class="stat-value">
             <img id="avatarImg" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAlWVYSWZNTQAqAAAACAAEAQAAAwAAAAEFJwAAAQEAAwAAAAEElgAAh2kABAAAAAEAAAA+ARIAAwAAAAEAAQAAAAAAAAACkoYAAgAAAA8AAABckggABAAAAAEAAAAAAAAAAE9wbHVzXzE2OTA4Mjg4AAADvElEQVRYCe2XS2sTQRSGHyUhohJBghBpUuLIHtghgUpkNSQPqg6NRNw6cOHCxWfgQrVShfQX/Ai/gQIv4UWrZWs2Kixv01T9qjKoa9n5vL1l3dn95X8nNvrxkLzUIIYQQQvhxq3wLwAwgVdyusx9UBvSDVhWQTlQFKvejlWf8iCeMOypJdFh9cz1kHckm/wWFdn1DE9FcISiqDKcBNRRGdrho3hV1l7GVbNMYJcFiabPSl4G45t45thTLVf6B6B3wGgA4At1utw4bWIhj/0Vq1F7nqwADtDdoFxFzjcU26KDM4z3cNqNd30A5GLP5m6wF6JY5t6RZFlKItAF1hDQqCqUEZEvU4oJcHkF4zQQaL2tsWe8pPeYdMkqKhq6Z2kVJggdBUnVaQbUN4CzoYOg5nd7T7gC8gA3W2u4U6YMrJbHz5SKvhBqVmbEoMZgO9gnzCzRrLBGa8ALXIpn9C9nyJElPlH6uIfrwPsGtlk7YcwCDM/vJwSuWx11jt3RYA91iDqpv+TK5xzOBo64y49k2jQMe07A3HZjFbZ4A+msTKLgRRoYtkixM2VbBiXJSZ3FsAamNImf1gFZ9TIKAZ3KzOIoF6mjAqlUlgqUnbMuTFeuAa7sGlIYZlI3NcdjAqPQWYZFhxSDgCMXGIrj6dgC5KXGFpQkhxKHYSKx4rRkOcFjbQx8RIaTfH6DFIF9XAkxV2V/wB6hBnylUwwYBvmBPo2FxepuM5noEOGaX5R2U7gLNeG8Ox05sIfQ93yPgei8gwDNb+0AtXyq9kgTA2Zd6VGHYIRvAKTEm4uUypT7gTuyNGRDo3yY26Y9Z4WqK+wGS8WkMr7qdifJ9bQPSiE+tUAl5TgqbH/wYmvHoEYXBA1pbgqf3UGa3n1ja6Xnfnok0W3yeiW6OvmKy3OqXjPgvnNkR+FPKfKwbxSWvwAAAABJRU5ErkJggg==" alt="头像" class="small-avatar" />
-            <input type="file" id="avatarUpload" accept="image/*" style="margin-top: 10px;" />
+            <input type="file" id="avatarUpload" accept="image/*" style="margin-top: 10px;" title="选择头像文件">
           </div>
         </div>
       </div>
