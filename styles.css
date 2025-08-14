@@ -267,8 +267,8 @@ body {
 /* 聊天页面样式 - 高度自适应 */
 #chatPage {
   display: none;  /* 将block改为none */
-  position: fixed;
-  overflow: hidden;
+  position: relative;
+  overflow: auto;  /* 允许页面滚动 */
   background: white;
   border-radius: 0;
   box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
@@ -390,7 +390,7 @@ body.eye-theme .export-btn-sidebar:hover {
   display: flex;
   flex-direction: column;
   padding: 10px 20px;
-  overflow: hidden;
+  overflow: auto;  /* 允许主区域滚动 */
 }
 
 #app {
@@ -436,7 +436,7 @@ h1 {
 }
 
 #chat {
-  height: calc(100vh - 350px); /* 增加底部留出的空间 */
+  height: calc(100% - 150px); /* 调整高度，确保有足够空间滚动 */
   max-height: none;
   flex: 1;
   overflow-y: auto;
