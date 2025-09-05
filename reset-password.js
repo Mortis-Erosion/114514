@@ -60,79 +60,57 @@ if (document.readyState === 'loading') {
 } else {
   initResetPasswordPage();
 }
-  
-  
-  // 检查重置密码按钮是否存在
-  if (resetPasswordBtn) {
-    // 重置密码功能
-    resetPasswordBtn.addEventListener('click', async function() {
-  const password = newPasswordInput.value;
-  const confirmPassword = confirmNewPasswordInput.value;
-  
-  if (password.length < 8) {
-    alert('密码长度至少为8位');
-    return;
-  }
-  
-  if (password !== confirmPassword) {
-    alert('两次输入的密码不一致');
-    return;
-  }
-  
-  // 简单密码强度检查
-  const hasNumber = /\d/.test(password);
-  const hasLetter = /[a-zA-Z]/.test(password);
-  
-  if (!hasNumber || !hasLetter) {
-    alert('密码需同时包含字母和数字');
-    return;
-  }
-  
-  // 显示加载状态
-  resetPasswordBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 处理中...';
-  
-  try {
-    // 从URL获取访问令牌
-    const hash = window.location.hash.substring(1);
-    const params = new URLSearchParams(hash);
-    const accessToken = params.get('access_token');
-    
-    if (!accessToken) {
-      throw new Error('未找到访问令牌，请重新发送重置密码邮件');
-    }
-    
-    // 使用Supabase更新密码
-    const { error } = await window.supabase.auth.updateUser({
-      password: password
-    });
-    
-    if (error) throw error;
-    
-    alert('密码重置成功！请使用新密码登录');
-    window.location.href = 'index.html';
-  } catch (error) {
-    console.error('密码重置错误:', error);
-    alert(`密码重置失败: ${error.message || '未知错误'}`);
-  } finally {
-    resetPasswordBtn.innerHTML = '重置密码';
-  }
-});
 
+// 初始化事件绑定
 function initResetPasswordEvents() {
-  const hash = window.location.hash.substring(1);
-  const params = new URLSearchParams(hash);
-  const accessToken = params.get('access_token');
+  initializeElements();
+  
+  if (!resetPasswordBtn) return;
 
-  if (!accessToken) {
-    alert('无效的密码重置链接，请重新发送重置密码邮件');
-    window.location.href = 'index.html';
-    return;
-  }
+  resetPasswordBtn.addEventListener('click', async function() {
+    const password = newPasswordInput.value;
+    const confirmPassword = confirmNewPasswordInput.value;
+
+    if (password.length < 8) return alert('密码长度至少为8位');
+    if (password !== confirmPassword) return alert('两次输入的密码不一致');
+    if (!/\d/.test(password) || !/[a-zA-Z]/.test(password)) {
+      return alert('密码需同时包含字母和数字');
+    }
+
+    resetPasswordBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 处理中...';
+
+    try {
+      // 确认 Supabase 已加载
+      if (!window.supabase) throw new Error('Supabase 未初始化');
+
+      // 获取 URL token 并设置 session
+      const hash = window.location.hash.substring(1);
+      const params = new URLSearchParams(hash);
+      const accessToken = params.get('access_token');
+      const refreshToken = params.get('refresh_token');
+
+      if (!accessToken || !refreshToken) {
+        throw new Error('重置密码链接无效，请重新发送邮件');
+      }
+
+      // 设置临时会话，才能更新密码
+      await window.supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken
+      });
+
+      const { error } = await window.supabase.auth.updateUser({ password });
+      if (error) throw error;
+
+      alert('密码重置成功，请用新密码登录');
+      window.location.href = 'index.html';
+    } catch (error) {
+      console.error('密码重置错误:', error);
+      alert(`密码重置失败: ${error.message || '未知错误'}`);
+    } finally {
+      resetPasswordBtn.innerHTML = '重置密码';
+    }
+  });
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initResetPasswordEvents);
-} else {
-  initResetPasswordEvents();
-}
-  }
+document.addEventListener('DOMContentLoaded', initResetPasswordEvents);

@@ -382,7 +382,15 @@ function typeWriterEffect(text, elementId, speed = 50) {
         clearInterval(window.chatState.typeWriterTimer);
         window.chatState.typeWriterTimer = null;
         window.chatState.currentTypeWriterElement = null;
-        window.chatElements.chat.scrollTop = window.chatElements.chat.scrollHeight;
+        
+        // 判断用户是否在底部（允许一点误差，比如 20px）
+        const chat = window.chatElements.chat;
+        const isAtBottom = chat.scrollTop + chat.clientHeight >= chat.scrollHeight - 20;
+        
+        // 只有在用户已经在底部时才自动滚动
+        if (isAtBottom) {
+          chat.scrollTop = chat.scrollHeight;
+        }
       }
     } catch (error) {
       console.error('打字机效果出错:', error);
@@ -474,8 +482,17 @@ function appendMessage(sender, text) {
   }
 
   // 添加到聊天区域
-  window.chatElements.chat.appendChild(msgDiv);
-  window.chatElements.chat.scrollTop = window.chatElements.chat.scrollHeight;
+  const chat = window.chatElements.chat;
+  
+  // 判断用户是否在底部（允许一点误差，比如 20px）
+  const isAtBottom = chat.scrollTop + chat.clientHeight >= chat.scrollHeight - 20;
+  
+  chat.appendChild(msgDiv);
+  
+  // 只有在用户已经在底部时才自动滚动
+  if (isAtBottom) {
+    chat.scrollTop = chat.scrollHeight;
+  }
 
   // 处理机器人消息的打字机效果和语音播报
   if (sender === 'bot') {

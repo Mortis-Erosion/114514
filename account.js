@@ -109,8 +109,10 @@ async function resetPassword(account) {
   const email = account; // 直接使用用户输入的邮箱地址
   
   try {
+    const redirectUrl = `${window.location.origin}${window.location.pathname.replace(/\/[^/]*$/, '')}/reset-password.html`;
+    
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin + '/reset-password.html',
+      redirectTo: redirectUrl,
     });
     
     if (error) throw error;
