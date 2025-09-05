@@ -109,20 +109,8 @@ async function resetPassword(account) {
   const email = account; // 直接使用用户输入的邮箱地址
   
   try {
-    // 动态生成适应部署环境的重置密码页面URL
-    // 处理GitHub Pages可能的子路径问题
-    const pathSegments = window.location.pathname.split('/').filter(segment => segment);
-    const isGitHubPages = pathSegments.length > 0; // 判断是否在子路径下（如GitHub Pages仓库名）
-    
-    // 构建基础路径
-    let basePath = '';
-    if (isGitHubPages) {
-      // 保留仓库名等基础路径
-      basePath = '/' + pathSegments.slice(0, -1).join('/') + '/';
-    } else {
-      // 根路径情况
-      basePath = window.location.pathname.replace(/\/[^/]*$/, '/');
-    }
+    // 关键修改：强制包含114514子路径（适配你的GitHub Pages部署路径）
+    const basePath = '/114514/'; // 直接指定包含子路径的基础路径
     
     // 生成完整的重置密码页面URL
     const redirectUrl = window.location.origin + basePath + 'reset-password.html';
