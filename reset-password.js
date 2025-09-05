@@ -5,6 +5,12 @@ function validateEmail(email) {
 
 let newPasswordInput, confirmNewPasswordInput, strengthMeter, resetPasswordBtn;
 
+// 在页面加载时把 hash 缓存下来，防止后续丢失
+const rawHash = window.location.hash;
+const params = new URLSearchParams(rawHash.substring(1));
+const accessToken = params.get('access_token');
+const refreshToken = params.get('refresh_token');
+
 // 初始化元素函数
 function initializeElements() {
   newPasswordInput = document.getElementById('newPassword');
@@ -83,12 +89,7 @@ function initResetPasswordEvents() {
       // 确认 Supabase 已加载
       if (!window.supabase) throw new Error('Supabase 未初始化');
 
-      // 获取 URL token 并设置 session
-      const hash = window.location.hash.substring(1);
-      const params = new URLSearchParams(hash);
-      const accessToken = params.get('access_token');
-      const refreshToken = params.get('refresh_token');
-
+      // 使用缓存的 token 设置 session
       if (!accessToken || !refreshToken) {
         throw new Error('重置密码链接无效，请重新发送邮件');
       }
