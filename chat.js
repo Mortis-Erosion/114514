@@ -380,12 +380,9 @@ function typeWriterEffect(text, elementId, speed = 50) {
         i++;
       } else {
         clearInterval(window.chatState.typeWriterTimer);
-          window.chatState.typeWriterTimer = null;
-          window.chatState.currentTypeWriterElement = null;
-          // 只在用户没有手动滚动的情况下自动滚动
-          if (window.chatElements.chat.scrollTop >= window.chatElements.chat.scrollHeight - window.chatElements.chat.clientHeight - 10) {
-            window.chatElements.chat.scrollTop = window.chatElements.chat.scrollHeight;
-          }
+        window.chatState.typeWriterTimer = null;
+        window.chatState.currentTypeWriterElement = null;
+        window.chatElements.chat.scrollTop = window.chatElements.chat.scrollHeight;
       }
     } catch (error) {
       console.error('打字机效果出错:', error);
@@ -478,10 +475,7 @@ function appendMessage(sender, text) {
 
   // 添加到聊天区域
   window.chatElements.chat.appendChild(msgDiv);
-  // 只在用户没有手动滚动的情况下自动滚动
-  if (window.chatElements.chat.scrollTop >= window.chatElements.chat.scrollHeight - window.chatElements.chat.clientHeight - 10) {
-    window.chatElements.chat.scrollTop = window.chatElements.chat.scrollHeight;
-  }
+  window.chatElements.chat.scrollTop = window.chatElements.chat.scrollHeight;
 
   // 处理机器人消息的打字机效果和语音播报
   if (sender === 'bot') {
@@ -1006,10 +1000,7 @@ function appendUploadMessage(text) {
 
   // 添加到聊天区域
   window.chatElements.chat.appendChild(msgDiv);
-  // 只在用户没有手动滚动的情况下自动滚动
-  if (window.chatElements.chat.scrollTop >= window.chatElements.chat.scrollHeight - window.chatElements.chat.clientHeight - 10) {
-    window.chatElements.chat.scrollTop = window.chatElements.chat.scrollHeight;
-  }
+  window.chatElements.chat.scrollTop = window.chatElements.chat.scrollHeight;
   
   // +++ 注意: 不更新聊天历史 +++
 }
