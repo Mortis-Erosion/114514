@@ -1291,9 +1291,8 @@ function loadCustomAgentInPage() {
   document.body.appendChild(overlay);
   console.log('覆盖层已添加到页面');
 
-  // 使用绝对路径加载 blank2.html 内容
-  const baseUrl = window.location.origin;
-  const blank2Url = `${baseUrl}/blank2.html`;
+  // 使用相对路径加载 blank2.html 内容
+  const blank2Url = 'blank2.html';
   console.log('开始加载 blank2.html，URL:', blank2Url);
 
   fetch(blank2Url)
