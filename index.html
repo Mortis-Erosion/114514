@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>智能聊天系统</title>
+  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAlWVYSWZNTQAqAAAACAAEAQAAAwAAAAEFJwAAAQEAAwAAAAEElgAAh2kABAAAAAEAAAA+ARIAAwAAAAEAAQAAAAAAAAACkoYAAgAAAA8AAABckggABAAAAAEAAAAAAAAAAE9wbHVzXzE2OTA4Mjg4AAADvElEQVRYCe2XS2sTQRSGHyUhohJBghBpUuLIHtghgUpkNSQPqg6NRNw6cOHCxWfgQrVShfQX/Ai/gQIv4UWrZWs2Kixv01T9qjKoa9n5vL1l3dn95X8nNvrxkLzUIIYQQQvhxq3wLwAwgVdyusx9UBvSDVhWQTlQFKvejlWf8iCeMOypJdFh9cz1kHckm/wWFdn1DE9FcISiqDKcBNRRGdrho3hV1l7GVbNMYJcFiabPSl4G45t45thTLVf6B6B3wGgA4At1utw4bWIhj/0Vq1F7nqwADtDdoFxFzjcU26KDM4z3cNqNd30A5GLP5m6wF6JY5t6RZFlKItAF1hDQqCqUEZEvU4oJcHkF4zQQaL2tsWe8pPeYdMkqKhq6Z2kVJggdBUnVaQbUN4CzoYOg5nd7T7gC8gA3W2u4U6YMrJbHz5SKvhBqVmbEoMZgO9gnzCzRrLBGa8ALXIpn9C9nyJElPlH6uIfrwPsGtlk7YcwCDM/vJwSuWx11jt3RYA91iDqpv+TK5xzOBo64y49k2jQMe07A3HZjFbZ4A+msTKLgRRoYtkixM2VbBiXJSZ3FsAamNImf1gFZ9TIKAZ3KzOIoF6mjAqlUlgqUnbMuTFeuAa7sGlIYZlI3NcdjAqPQWYZFhxSDgCMXGIrj6dgC5KXGFpQkhxKHYSKx4rRkOcFjbQx8RIaTfH6DFIF9XAkxV2V/wB6hBnylUwwYBvmBPo2FxepuM5noEOGaX5R2U7gLNeG8Ox05sIfQ93yPgei8gwDNb+0AtXyq9kgTA2Zd6VGHYIRvAKTEm4uUypT7gTuyNGRDo3yY26Y9Z4WqK+wGS8WkMr7qdifJ9bQPSiE+tUAl5TgqbH/wYmvHoEYXBA1pbgqf3UGa3n1ja6Xnfnok0W3yeiW6OvmKy3OqXjPgvnNkR+FPKfKwbxSWvwAAAABJRU5ErkJggg==" sizes="32x32">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="styles.css">
   <!-- tesseract.js v2/v3/v4 都支持 createWorker；如果用 v5 请确保用对应用法 -->
@@ -12,7 +13,7 @@
   <!-- 添加自定义智能体所需的样式 -->
   <style>
     .loader {
-      display: flex;
+      display: none;
       justify-content: center;
       align-items: center;
     }
@@ -139,26 +140,8 @@
 
   <!-- 聊天页面 -->
   <div id="chatPage">
-    <!-- 添加右侧智能体按钮容器 -->
-    <div class="agent-buttons-container">
-      <button id="newPageBtn" title="英文翻译老师">
-        <i class="fas fa-language"></i>
-        <span>英文翻译老师</span>
-      </button>
-      <button id="newPageBtn2" title="知心大姐姐">
-        <i class="fas fa-file-alt"></i>
-        <span>知心大姐姐</span>
-      </button>
-      <button id="newPageBtn3" title="诗仙李白">
-        <i class="fas fa-file"></i>
-        <span>诗仙李白</span>
-      </button>
-      <button id="newPageBtn4" title="自定义智能体">
-        <i class="fas fa-file-code"></i>
-        <span>自定义智能体</span>
-      </button>
-    </div>
-
+    <!-- 移除原来的agent-buttons-container -->
+    
     <div class="card">
       <div class="header">
         <h1>智能聊天助手</h1>
@@ -172,7 +155,11 @@
           <button id="logoutBtn" title="退出登录">
             <i class="fas fa-sign-out-alt"></i>
           </button>
-          <!-- 添加API选择器 -->
+          <!-- 将自定义智能体按钮移到这里，API选择器的左边 -->
+          <button id="newPageBtn4" title="自定义智能体">
+            <i class="fas fa-file-code"></i>
+            <span>自定义智能体</span>
+          </button>
           <!-- 添加API选择器 -->
           <div class="api-selector">
             <select id="apiSelect">
@@ -344,5 +331,160 @@
   <!-- 引入文档解析库 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+
+  <!-- 自定义智能体模态模板 -->
+  <template id="customAgentTemplate">
+    <div class="custom-agent-root" role="dialog" aria-modal="true">
+      <div class="custom-agent-header">
+        <button data-role="backBtn" class="btn-back"><i class="fas fa-arrow-left"></i> 返回聊天</button>
+        <h2 style="margin:0;">自定义智能体</h2>
+        <!-- 可放更多 header 控件 -->
+      </div>
+
+      <div class="custom-agent-body" data-role="body">
+        <!-- 把 blank2 的聊天主区（#app 内部）HTML 放这里 -->
+        <!-- 注意：把所有 id="xxx" 改为 data-role="xxx"（或 class）来避免全局 id 重复 -->
+        <div class="chat-layout">
+          <!-- 左侧历史记录区 -->
+          <div class="history-sidebar">
+            <div class="sidebar-header">
+              <h3>聊天记录</h3>
+              <!-- 添加导出按钮 -->
+              <div class="history-export">
+                <button data-role="exportHistoryBtn" class="export-btn-sidebar">
+                  <i class="fas fa-download"></i> 导出
+                </button>
+              </div>
+              <div class="history-controls-sidebar">
+                <input type="text" data-role="searchInputSidebar" placeholder="搜索记录...">
+                <button data-role="refreshHistoryBtnSidebar" class="refresh-btn-sidebar">
+                  <i class="fas fa-sync-alt"></i>
+                </button>
+              </div>
+            </div>
+            <div data-role="historyListSidebar" class="history-items"></div>
+          </div>
+          
+          <!-- 右侧聊天主区域 -->
+          <div class="chat-main">
+            <div class="agent-panel">
+              <div class="agent-title">选择智能体</div>
+              <div class="row agent-row">
+                <select data-role="agentSelect" class="agent-select"></select>
+                <button type="button" class="add-btn agent-add" data-role="addAgentBtn" title="添加智能体">+</button>
+                <button type="button" class="add-btn agent-delete" data-role="deleteAgentBtn" title="删除当前智能体" style="margin-left: 6px; background: #ef4444;">
+                  <i class="fas fa-trash-alt"></i>
+                </button>
+                <button type="button" class="add-btn agent-refresh" data-role="refreshAgentBtn" title="刷新智能体列表" style="margin-left: 6px; background: #10b981;">
+                  <i class="fas fa-sync-alt"></i>
+                </button>
+              </div>
+            </div>
+            
+            <div data-role="agentForm" class="agent-form" style="display:none;">
+              <div class="form-title">创建新智能体</div>
+              <input type="text" data-role="agentName" placeholder="智能体名称">
+              <textarea data-role="agentPrompt" placeholder="智能体系统提示词（人格背景设定）"></textarea>
+              <div class="row agent-form-actions">
+                <button data-role="saveAgentBtn" class="btn-primary">保存</button>
+                <button data-role="cancelAgentBtn" class="btn-ghost">取消</button>
+              </div>
+            </div>
+            
+            <div data-role="chat" class="custom-agent-chat"></div>
+            <div class="custom-agent-input-bar">
+              <textarea data-role="input" placeholder="请输入您的问题..."></textarea>
+              <button data-role="sendBtn" class="send-btn">
+                <span>发送</span>
+                <span data-role="loadingIcon" style="display:none;">...</span>
+              </button>
+            </div>
+            <div class="button-container">
+              <button data-role="clearBtn" id="clearBtn">清除聊天记录</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 可在 template 中包含局部样式（尽量缩小选择器范围，避免污染全局） -->
+    <style>
+      .custom-agent-root { background: #ffffff; width:100%; max-width:1100px; margin:0 auto; box-shadow:0 20px 60px rgba(0,0,0,0.18); border-radius:16px; display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+      .custom-agent-header { padding:16px 20px; display:flex; align-items:center; gap:12px; border-bottom:1px solid #eef2f7; background: linear-gradient(180deg, #ffffff, #f8fafc); }
+      .custom-agent-body { flex:1; overflow:auto; padding:20px; background:#f6f8fb; }
+      .btn-back { background:#f1f5f9;border:none;padding:8px 12px;border-radius:10px;cursor:pointer; color:#1f2937; display:inline-flex; align-items:center; gap:6px; }
+      .chat-layout { display:grid; grid-template-columns: 320px 1fr; gap:18px; height:100%; }
+      .history-sidebar { background:#ffffff; border:1px solid #eef2f7; border-radius:14px; padding:12px; display:flex; flex-direction:column; min-height:0; }
+      .history-items { flex:1; overflow:auto; padding-right:6px; }
+      .history-controls-sidebar input { border:1px solid #e5e7eb; border-radius:10px; padding:8px 10px; }
+      .refresh-btn-sidebar, .export-btn-sidebar { border:none; background:#f1f5f9; border-radius:10px; padding:8px 10px; cursor:pointer; }
+      .history-item { background:#f9fafb; border:1px solid #eef2f7; border-radius:10px; padding:10px; transition: all 0.2s ease; }
+      .history-item:hover { background:#ffffff; box-shadow:0 6px 16px rgba(15,23,42,0.08); transform: translateY(-1px); }
+      .chat-main { background:#ffffff; border:1px solid #eef2f7; border-radius:14px; padding:16px; display:flex; flex-direction:column; min-height:0; }
+      .agent-panel { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+      .agent-title { font-weight:600; color:#0f172a; }
+      .agent-row { flex:1; }
+      .agent-select { width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:10px; background:#fff; }
+      .agent-add { width:40px; height:40px; border-radius:10px; border:none; background:#0ea5e9; color:#fff; font-weight:600; cursor:pointer; box-shadow:0 6px 14px rgba(14,165,233,0.25); }
+      .agent-form { background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:12px; margin-bottom:12px; }
+      .agent-form input, .agent-form textarea { width:100%; border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; background:#ffffff; }
+      .agent-form textarea { min-height:90px; resize:vertical; }
+      .agent-form-actions { justify-content:flex-end; }
+      .btn-primary { border:none; background:#2563eb; color:#fff; border-radius:10px; padding:8px 14px; cursor:pointer; }
+      .btn-ghost { border:1px solid #e5e7eb; background:#ffffff; color:#0f172a; border-radius:10px; padding:8px 14px; cursor:pointer; }
+      .custom-agent-chat { flex:1; overflow:auto; padding:6px 4px 12px; }
+      .custom-agent-input-bar { margin-top:auto; position:relative; background:linear-gradient(180deg, rgba(255,255,255,0.9), #ffffff); border-top:1px solid #eef2f7; padding:12px 8px 8px; }
+      .custom-agent-input-bar textarea { width:100%; min-height:110px; border:1px solid #e5e7eb; border-radius:14px; padding:12px 56px 36px 14px; resize:vertical; background:#ffffff; }
+      .send-btn { position:absolute; right:18px; bottom:20px; border:none; background:linear-gradient(135deg, #3b82f6, #6366f1); color:#fff; padding:10px 14px; border-radius:12px; cursor:pointer; box-shadow:0 10px 24px rgba(59,130,246,0.35); }
+      .button-container { margin-top:10px; }
+      body.dark-theme .custom-agent-root { background:#0f172a; box-shadow:0 24px 70px rgba(0,0,0,0.35); }
+      body.dark-theme .custom-agent-header { background:linear-gradient(180deg, #0f172a, #111827); border-bottom-color:#1f2937; }
+      body.dark-theme .custom-agent-body { background:#0b1220; }
+      body.dark-theme .chat-main, body.dark-theme .history-sidebar { background:#111827; border-color:#1f2937; }
+      body.dark-theme .agent-title, body.dark-theme .custom-agent-header h2 { color:#e5e7eb; }
+      body.dark-theme .agent-select, body.dark-theme .agent-form input, body.dark-theme .agent-form textarea, body.dark-theme .custom-agent-input-bar textarea { background:#0b1220; border-color:#1f2937; color:#e5e7eb; }
+      body.dark-theme .history-item { background:#0b1220; border-color:#1f2937; }
+      body.dark-theme .history-item,
+      body.dark-theme .history-item .search-header,
+      body.dark-theme .history-item .record-preview,
+      body.dark-theme .history-item .user-msg { color:#e5e7eb; }
+      body.dark-theme .btn-ghost { background:#0b1220; color:#e5e7eb; border-color:#1f2937; }
+      body.dark-theme .btn-back { background:#111827; color:#e5e7eb; }
+      body.dark-theme .custom-agent-input-bar { background:linear-gradient(180deg, rgba(15,23,42,0.9), #0f172a); border-top-color:#1f2937; }
+      body.eye-theme .custom-agent-root { background:#f6f3e8; }
+      body.eye-theme .custom-agent-header { background:linear-gradient(180deg, #f9f6ed, #f3efe4); border-bottom-color:#e6e0d2; }
+      body.eye-theme .custom-agent-body { background:#f4f1e8; }
+      body.eye-theme .chat-main, body.eye-theme .history-sidebar { background:#fbf8f1; border-color:#e6e0d2; }
+      body.eye-theme .agent-select, body.eye-theme .agent-form input, body.eye-theme .agent-form textarea, body.eye-theme .custom-agent-input-bar textarea { background:#fffdf7; border-color:#e6e0d2; }
+      body.eye-theme .custom-agent-input-bar { background:linear-gradient(180deg, rgba(251,248,241,0.9), #fbf8f1); border-top-color:#e6e0d2; }
+      /* clearBtn 样式 */
+      #clearBtn {
+        margin-top: 12px;
+        background-color: #f8fafc;
+        color: #4a5568;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        width: 100%;
+        padding: 10px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      
+      #clearBtn:hover {
+        background-color: #edf2f7;
+        color: #2d3748;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+      }
+      
+      #clearBtn:active {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+      }
+      /* 其它局部样式... */
+    </style>
+  </template>
+
 </body>
 </html>

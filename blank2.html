@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>自定义智能体对话</title>
-<!-- 引入Font Awesome图标库 -->
+<!-- 引入Font Awesome图标 -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
 /* 基础样式优化 */
@@ -20,6 +20,50 @@ body {
   height: 100vh;
   overflow: hidden;
   background-attachment: fixed;
+}
+
+/* 历史记录项目样式 */
+.search-record-item {
+  padding: 12px;
+  border-bottom: 1px solid #e1e5eb;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 8px;
+  border-radius: 8px;
+}
+
+.search-record-item:hover {
+  background-color: #f1f5f9;
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.search-header {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 500;
+  font-size: 0.9rem;
+  color: #4a5568;
+  margin-bottom: 5px;
+}
+
+.search-header span {
+  font-size: 0.8rem;
+  color: #718096;
+  font-weight: normal;
+}
+
+.record-preview {
+  font-size: 0.85rem;
+  color: #718096;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.user-msg {
+  color: #4a5568;
 }
 
 #app {
@@ -45,6 +89,105 @@ body {
   right: 0;
   height: 5px;
   background: linear-gradient(90deg, #4361ee, #3a0ca3);
+}
+
+/* 添加聊天布局样式 */
+.chat-layout {
+  display: flex;
+  height: calc(100vh - 120px); /* 适应整体高度 */
+}
+
+/* 历史记录侧边栏样式 */
+.history-sidebar {
+  width: 280px;
+  background: #f8f9ff;
+  border-right: 1px solid #e1e5eb;
+  overflow-y: auto;
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-header {
+  margin-bottom: 15px;
+}
+
+.history-controls-sidebar {
+  display: flex;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+#searchInputSidebar {
+  flex: 1;
+  padding: 8px 12px;
+  border: 2px solid #e1e5eb;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  transition: all 0.3s;
+}
+
+#searchInputSidebar:focus {
+  outline: none;
+  border-color: #2575fc;
+  box-shadow: 0 0 0 2px rgba(37, 117, 252, 0.2);
+}
+
+.refresh-btn-sidebar {
+  padding: 8px 10px;
+  background: #2575fc;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+}
+
+.refresh-btn-sidebar:hover {
+  background: #1a5fb4;
+}
+
+.history-items {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* 添加在历史记录样式部分 */
+.history-export {
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.export-btn-sidebar {
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.3s;
+}
+
+.export-btn-sidebar:hover {
+  background-color: #45a049;
+  transform: translateY(-2px);
+}
+
+/* 聊天主区域样式 */
+.chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 20px 15px; /* 底部padding从默认值增加到15px */
+  overflow: hidden;
 }
 
 /* 标签样式 */
@@ -404,7 +547,7 @@ button:disabled {
   40% { transform: translateY(-10px); }
 }
 
-/* 响应式设计 */
+/* 响应式设置 */
 @media (max-width: 480px) {
   #app {
     padding: 15px;
@@ -419,391 +562,523 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-top: 15px;
-}
-
-
-#chatPage {
-  display: block; /* 打开聊天页面 */
-  position: fixed;
-  top: 0; left: 0;
-  width: 100%;
-  height: 100vh;
-  background: white;
-  overflow: hidden; /* 防止溢出 */
-  border-radius: 0;
-  box-shadow: 0 15px 40px rgba(0,0,0,0.3);
-  margin: 0 auto;
-  z-index: 9999;
-}
-
-.message {
-  display: flex;
-  gap: 15px;
-  margin-bottom: 20px;
-  animation: fadeIn 0.3s ease-out;
-}
-
-/* 用户消息样式 */
-.user {
-  align-self: flex-end;
-}
-
-/* 机器人消息样式 */
-.bot {
-  align-self: flex-start;
-}
-
-.avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.2s ease;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-
-.user .avatar {
-  background: #4361ee;
-  order: 2; /* 用户头像在右侧 */
-  color: white;
-}
-
-.bot .avatar {
-  background: #4a5568;
-  order: 1; /* AI头像在左侧 */
-  color: white;
-}
-
-.avatar i {
-  font-size: 1.2em;
-}
-
-.message-content {
-  max-width: 80%;
-  padding: 12px 15px;
-  border-radius: 18px;
-  line-height: 1.5;
-  position: relative;
-  box-shadow: 0 3px 6px rgba(0,0,0,0.05);
-}
-
-.user .message-content {
-  background: #007bff;
-  color: white;
-  border-bottom-right-radius: 5px;
-}
-
-.bot .message-content {
-  background: #edf2f7;
-  color: #2d3748;
-  border-bottom-left-radius: 5px;
-}
-
-.timestamp {
-  font-size: 0.7em;
-  color: #a0aec0;
-  margin-top: 4px;
-  text-align: right;
-}
-
-.message-header {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 5px;
-  font-weight: 500;
-  font-size: 0.85em;
-}
-
-.user .message-header {
-  color: #e6f0fa;
-}
-
-.bot .message-header {
-  color: #4a5568;
-}
-h1 {
-  font-size: 1.8em;
-  margin-bottom: 25px;
-  text-align: center;
-  color: #2b2d42;
-  position: relative;
-  padding-bottom: 15px;
-  font-weight: 700;
-  letter-spacing: -0.5px;
-}
-
-h1::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 25%;
-  width: 50%;
-  height: 3px;
-  background: linear-gradient(90deg, transparent, #4361ee, transparent);
-  border-radius: 3px;
-}
-/* 输入控件样式 */
-input, textarea, select {
-  width: 100%;
-  padding: 12px 15px;
-  font-size: 1em;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  background: #fff;
-  transition: all 0.3s ease;
-  margin-bottom: 15px;
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.03);
-}
-
-input:focus, textarea:focus, select:focus {
-  outline: none;
-  border-color: #007bff;
-  box-shadow: 0 0 0 3px rgba(0,123,255,0.15);
-}
-
-textarea {
-  min-height: 110px;
-  resize: vertical;
-  border-radius: 16px;
-  padding: 15px;
-}
-
-#input {
-  border-radius: 16px;
-  margin-bottom: 15px;
-  border: 1px solid #e2e8f0;
-  transition: all 0.3s ease;
-}
-
-#input:focus {
-  border-color: #4361ee;
-  box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.15);
-}
-
-/* 按钮样式优化 */
-button {
-  padding: 14px 20px;
-  font-size: 1em;
-  font-weight: 500;
-  border: none;
-  border-radius: 50px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-#sendBtn {
-  background: linear-gradient(135deg, #4361ee, #3a0ca3);
-  color: white;
-  box-shadow: 0 4px 15px rgba(67, 97, 238, 0.3);
-  width: 100%;
-  font-weight: 600;
-}
-
-#sendBtn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #3a0ca3, #4361ee);
-  transform: translateY(-3px);
-  box-shadow: 0 6px 20px rgba(67, 97, 238, 0.4);
-}
-
-#sendBtn:active:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 3px 10px rgba(67, 97, 238, 0.3);
-}
-
-button:disabled {
-  background-color: #a0aec0;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
-}
-
-#clearBtn {
-  margin-top: 12px;
-  background-color: #f8fafc;
-  color: #4a5568;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-  width: 100%;
-}
-
-#clearBtn:hover {
-  background-color: #edf2f7;
-  color: #2d3748;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 10px rgba(0,0,0,0.08);
-}
-
-#clearBtn:active {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-}
-/* 行布局样式 */
-.row {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-
-.row button {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-
-#agentSelect {
-  flex: 1;
-}
-
-/* 智能体表单样式 */
-#agentForm {
-  margin-bottom: 15px;
-  background: #f9fafb;
-  padding: 15px;
-  border-radius: 12px;
-  border: 1px dashed #cbd5e0;
-}
-
-.form-title {
-  font-weight: 600;
-  margin-bottom: 12px;
-  color: #2d3748;
-  font-size: 1.1em;
-}
-
-/* 添加新智能体按钮 */
-.add-btn {
-  background: #edf2f7;
-  color: #2d3748;
-  padding: 10px;
-  font-size: 1.2em;
-  border-radius: 50%;
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-}
-
-.add-btn:hover {
-  background: #e2e8f0;
-  transform: rotate(90deg);
-}
-
-/* 加载指示器 */
-.typing-indicator {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 15px;
-  font-style: italic;
-  color: #718096;
-}
-
-.typing-dots {
-  display: flex;
-  gap: 4px;
-  margin-left: 8px;
-}
-
-.typing-dot {
-  width: 8px;
-  height: 8px;
-  background: #a0aec0;
-  border-radius: 50%;
-  animation: bounce 1.4s infinite ease-in-out both;
-}
-
-.typing-dot:nth-child(1) { animation-delay: -0.32s; }
-.typing-dot:nth-child(2) { animation-delay: -0.16s; }
-
-/* 滚动条样式 */
-#chat::-webkit-scrollbar {
-  width: 8px;
-}
-
-#chat::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 4px;
-}
-
-#chat::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 4px;
-}
-
-#chat::-webkit-scrollbar-thumb:hover {
-  background: #a0aec0;
-}
-
-/* 动画定义 */
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes bounce {
-  0%, 80%, 100% { transform: translateY(0); }
-  40% { transform: translateY(-10px); }
-}
-
-/* 响应式设计 */
-@media (max-width: 480px) {
-  #app {
-    padding: 15px;
-  }
-  
-  .message-content {
-    max-width: 75%;
-  }
+  margin-top: 2px; /* 从5px减少到2px */
 }
 </style>
+
+<!-- BEGIN: ensure createClient available (place this at top of <head>) -->
+<script type="module">
+(async () => {
+  // 尝试从两个 CDN 的 module 版本 import（更可靠）
+  const urls = [
+    'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/module/index.mjs',
+    'https://unpkg.com/@supabase/supabase-js@2/dist/module/index.mjs'
+  ];
+
+  for (const url of urls) {
+    try {
+      const mod = await import(url);
+      const createClientFn = mod.createClient ?? (mod.default && mod.default.createClient);
+      if (typeof createClientFn === 'function') {
+        // 挂到全局，供非-module 脚本使用
+        window.createClient = createClientFn;
+        console.log('[supabase-loader] createClient 已挂载到 window.createClient via', url);
+        break;
+      }
+    } catch (e) {
+      console.warn('[supabase-loader] import 失败:', url, e);
+    }
+  }
+
+  console.log('[supabase-loader] 检查： createClient ->', typeof window.createClient, ' window.supabase ->', !!window.supabase);
+})();
+</script>
+<!-- END: ensure createClient available -->
+
+<!-- 正确的 Supabase v2 CDN - 使用具体版本 -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+
+<!-- ------------- supabase 兼容 shim（放在 UMD script 后） ------------- -->
+<script>
+  (function(){
+    // 如果 module loader 已经把 createClient 放到 window，就不用处理
+    if (typeof window.createClient === 'function') {
+      console.log('[supabase-shim] window.createClient 已存在，跳过 shim');
+      return;
+    }
+
+    // 如果 UMD 暴露了全局 supabase
+    if (window.supabase) {
+      // 情况 A: UMD 里本身暴露了 createClient（某些构建会）
+      if (typeof window.supabase.createClient === 'function') {
+        window.createClient = function(url, key) {
+          // 有些 UMD createClient 返回一个命名空间，需要 new 一下或调用
+          try { return window.supabase.createClient(url, key); } catch (e) { console.warn(e); return window.supabase; }
+        };
+        console.log('[supabase-shim] 从 window.supabase.createClient 生成 window.createClient');
+        return;
+      }
+
+      // 情况 B: UMD 已经直接是一个 client 实例（有 .from）
+      if (typeof window.supabase.from === 'function') {
+        // 把 createClient shim 成返回这个实例（方便后续代码统一使用 createClient）
+        window.createClient = function(url, key) {
+          console.warn('[supabase-shim] createClient shim 返回已存在的 window.supabase 实例 —— 注意：这不是新的 client 实例');
+          return window.supabase;
+        };
+        console.log('[supabase-shim] window.supabase 已是 client，createClient 被 shim');
+        return;
+      }
+    }
+
+    // 情况 C: module import 失败且没有 UMD（或 UMD 尚未初始化）——延迟检查尝试
+    // 这里做一个短暂的延迟重试（最多 3 次）
+    let attempts = 0;
+    const tryLater = () => {
+      attempts++;
+      if (typeof window.createClient === 'function') return;
+      if (window.supabase) {
+        if (typeof window.supabase.createClient === 'function') {
+          window.createClient = function(url, key) { try { return window.supabase.createClient(url, key); } catch(e){ return window.supabase; } };
+          console.log('[supabase-shim] (delayed) 从 window.supabase.createClient 生成 window.createClient');
+          return;
+        }
+        if (typeof window.supabase.from === 'function') {
+          window.createClient = function(){ return window.supabase; };
+          console.log('[supabase-shim] (delayed) shim createClient -> 返回 window.supabase');
+          return;
+        }
+      }
+      if (attempts < 3) setTimeout(tryLater, 300);
+      else console.warn('[supabase-shim] 未能找到 createClient 或 已可用 client —— 请检查 supabase SDK 引入顺序/版本');
+    };
+    setTimeout(tryLater, 200);
+  })();
+</script>
+<!-- ------------------------------------------------------------------ -->
+
+<script>
+  // 全局函数：统一返回可用 client（在 head 中定义，确保全局可见）
+  window.getSupabaseClient = function() {
+    // 优先：如果已有 window.supabase 且看起来像 client（有 .from），直接返回
+    if (window.supabase && typeof window.supabase.from === 'function') return window.supabase;
+
+    // 已创建的 v2 client（我们可能在脚本里创建过）
+    if (window.supabaseClient && typeof window.supabaseClient.from === 'function') return window.supabaseClient;
+
+    // 如果 createClient 可用，则创建 v2 client（并缓存）
+    if (typeof window.createClient === 'function') {
+      try {
+        if (!window.supabaseClient) {
+          window.supabaseClient = window.createClient(
+            'https://sfathljcqvsqtazfcohb.supabase.co',
+            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmYXRobGpjcXZzcXRhemZjb2hiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQzNzYxNTAsImV4cCI6MjA2OTk1MjE1MH0.e0h04FnSKOnoPDDVU1LqpgpofT5mJiym1QrB1NFZfQ4'
+          );
+          // 可选：也覆盖 window.supabase 以兼容旧代码
+          window.supabase = window.supabaseClient;
+        }
+        return window.supabaseClient;
+      } catch (e) {
+        console.warn('[getSupabaseClient] createClient 创建 client 失败', e);
+      }
+    }
+
+    // 最后退回：若 window.supabase 存在但没有 .from，仍尝试返回它（风险较小）
+    if (window.supabase) return window.supabase;
+
+    return null;
+  };
+</script>
+
 </head>
 <body>
 <div id="app">
   <h1>自定义智能体对话</h1>
-  <!-- 添加返回按钮 -->
-  <!-- 删除返回聊天页面按钮 -->
-
-  <label>选择智能体</label>
-  <div class="row">
-    <select id="agentSelect"></select>
-    <button class="add-btn" onclick="showAgentForm()">➕</button>
-  </div>
   
-  <div id="agentForm" style="display:none;">
-    <div class="form-title">创建新智能体</div>
-    <input type="text" id="agentName" placeholder="智能体名称">
-    <textarea id="agentPrompt" placeholder="智能体系统提示词（人格/背景设定）"></textarea>
-    <div class="row">
-      <button onclick="saveAgent()">保存</button>
-      <button onclick="cancelAgentForm()">取消</button>
+  <!-- 添加聊天布局容器 -->
+  <div class="chat-layout">
+    <!-- 左侧历史记录区 -->
+    <div class="history-sidebar">
+      <div class="sidebar-header">
+        <h3>聊天记录</h3>
+        <!-- 添加导出按钮 -->
+        <div class="history-export">
+          <button id="exportHistoryBtn" class="export-btn-sidebar">
+            <i class="fas fa-download"></i> 导出
+          </button>
+        </div>
+        <div class="history-controls-sidebar">
+          <input type="text" id="searchInputSidebar" placeholder="搜索记录...">
+          <button id="refreshHistoryBtnSidebar" class="refresh-btn-sidebar">
+            <i class="fas fa-sync-alt"></i>
+          </button>
+        </div>
+      </div>
+      <div id="historyListSidebar" class="history-items"></div>
+    </div>
+    
+    <!-- 右侧聊天主区域 -->
+    <div class="chat-main">
+      <label>选择智能体</label>
+      <div class="row">
+        <select id="agentSelect"></select>
+        <button class="add-btn" onclick="showAgentForm()">+</button>
+      </div>
+      
+      <div id="agentForm" style="display:none;">
+        <div class="form-title">创建新智能体</div>
+        <input type="text" id="agentName" placeholder="智能体名称">
+        <textarea id="agentPrompt" placeholder="智能体系统提示词（人格背景设定）"></textarea>
+        <div class="row">
+          <button onclick="saveAgent()">保存</button>
+          <button onclick="cancelAgentForm()">取消</button>
+        </div>
+      </div>
+      
+      <div id="chat"></div>
+      <textarea id="input" placeholder="请输入您的问题..."></textarea>
+      <div class="button-container">
+        <button id="sendBtn">
+          <span>发送</span>
+          <span id="loadingIcon" style="display:none;">...</span>
+        </button>
+      </div>
     </div>
   </div>
   
-  <div id="chat"></div>
-  <textarea id="input" placeholder="请输入您的问题..."></textarea>
-  <div class="button-container">
-    <button id="sendBtn">
-      <i class="fas fa-paper-plane"></i>
+  <!-- 初始化Supabase 客户端 -->
+  <script>
+/* ---------- 配置 ---------- */
+const SUPABASE_URL = 'https://sfathljcqvsqtazfcohb.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmYXRobGpjcXZzcXRhemZjb2hiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQzNzYxNTAsImV4cCI6MjA2OTk1MjE1MH0.e0h04FnSKOnoPDDVU1LqpgpofT5mJiym1QrB1NFZfQ4'; // 确认为 anon key（前端用）
+
+/* ---------- 统一获取 supabase client 的函数 ---------- */
+// 注意：全局 getSupabaseClient 已在 head 中定义，这里不再重复定义
+
+/* ---------- 初始化 Supabase（恢复 session、监听 auth 变化、加载历史） ---------- */
+async function initSupabaseAndLoad() {
+  try {
+    const client = getSupabaseClient();
+    if (!client) {
+      console.warn('[initSupabaseAndLoad] 没有可用 supabase client，跳过 session 恢复与加载历史');
+      return;
+    }
+
+    // 尝试恢复 session（如果主应用把 session 存 localStorage）
+    try {
+      // 大多数 supabase client 支持 auth.getSession
+      if (client.auth && typeof client.auth.getSession === 'function') {
+        const { data: sessionData, error: sessionErr } = await client.auth.getSession();
+        if (sessionErr) console.warn('[init] getSession error', sessionErr);
+        if (sessionData?.session?.user) {
+          console.log('[init] 已有 session：', sessionData.session.user.id);
+        } else {
+          // 从 localStorage 恢复（如果主站保存了 access/refresh）
+          const saved = JSON.parse(localStorage.getItem('supabase_session') || 'null');
+          if (saved && saved.access_token) {
+            const { data, error } = await client.auth.setSession({
+              access_token: saved.access_token,
+              refresh_token: saved.refresh_token
+            });
+            if (error) console.warn('[init] setSession error', error);
+            else console.log('[init] 从 localStorage 恢复 session');
+          }
+        }
+      }
+    } catch(e) {
+      console.warn('[init] session 恢复异常', e);
+    }
+
+    // 监听 auth 状态变化（登录/登出）
+    if (client.auth && typeof client.auth.onAuthStateChange === 'function') {
+      client.auth.onAuthStateChange((event, session) => {
+        console.log('[auth] state change', event, session?.user?.id);
+        if (session?.user) loadCustomAgentHistoryToSidebar();
+        else {
+          const historyList = document.getElementById('historyListSidebar');
+          if (historyList) historyList.innerHTML = '<div style="padding:15px;color:#666;">请先登录以查看历史记录</div>';
+        }
+      });
+    }
+
+    // 初始加载历史
+    await loadCustomAgentHistoryToSidebar();
+  } catch (err) {
+    console.error('[initSupabaseAndLoad] 异常', err);
+  }
+}
+
+/* ---------- 保存聊天记录：使用 getSupabaseClient() ---------- */
+async function saveCustomAgentChatRecord(userMsg, botMsg) {
+  try {
+    const client = getSupabaseClient();
+    if (!client) {
+      console.error('saveCustomAgentChatRecord: 没有可用 Supabase 客户端');
+      return { error: 'no_client' };
+    }
+
+    // 尝试获取 userId
+    let userId = null;
+    if (client.auth && typeof client.auth.getSession === 'function') {
+      const { data: sessionData } = await client.auth.getSession();
+      userId = sessionData?.session?.user?.id;
+    }
+
+    // 若没有 session，再尝试从 localStorage 或全局变量寻找
+    if (!userId) {
+      const saved = JSON.parse(localStorage.getItem('supabase_session') || 'null');
+      if (saved && saved.access_token_info && saved.access_token_info.user) {
+        userId = saved.access_token_info.user.id;
+      }
+    }
+
+    if (!userId) {
+      console.warn('saveCustomAgentChatRecord: 未检测到 userId（用户可能未登录）');
+      return { error: 'no_user' };
+    }
+
+    const payload = {
+      user_id: userId,
+      user_message: userMsg ?? '',
+      assistant_message: botMsg ?? ''
+    };
+
+    const res = await client.from('conversations_add').insert([payload]).select();
+    if (res?.error) {
+      console.error('saveCustomAgentChatRecord: 插入失败', res.error);
+      return { error: res.error };
+    }
+
+    console.log('saveCustomAgentChatRecord: 插入成功', res.data);
+    if (typeof loadCustomAgentHistoryToSidebar === 'function') {
+      try { loadCustomAgentHistoryToSidebar(); } catch(e){ console.warn('刷新历史失败', e); }
+    }
+    return { data: res.data };
+  } catch (err) {
+    console.error('saveCustomAgentChatRecord 捕获异常', err);
+    return { error: err };
+  }
+}
+
+/* ---------- 加载历史（侧栏） ---------- */
+async function loadCustomAgentHistoryToSidebar() {
+  try {
+    const historyList = document.getElementById('historyListSidebar');
+    historyList.innerHTML = '';
+
+    const client = getSupabaseClient();
+    if (!client) {
+      historyList.innerHTML = '<div style="padding:15px;color:#666;">请先登录以查看历史记录</div>';
+      return;
+    }
+
+    // 获取用户 id
+    let userId = null;
+    if (client.auth && typeof client.auth.getSession === 'function') {
+      const { data: sessionData } = await client.auth.getSession();
+      userId = sessionData?.session?.user?.id;
+    }
+    if (!userId) {
+      historyList.innerHTML = '<div style="padding:15px;color:#666;">请先登录以查看历史记录</div>';
+      return;
+    }
+
+    const { data: records, error } = await client
+      .from('conversations_add')
+      .select('id, created_at, user_message, assistant_message')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (error) {
+      console.error('加载历史记录失败', error);
+      historyList.innerHTML = '<div style="padding:15px;color:#666;">加载历史记录失败</div>';
+      return;
+    }
+    if (!records || records.length === 0) {
+      historyList.innerHTML = '<div style="padding:15px;color:#666;">暂无历史记录</div>';
+      return;
+    }
+
+    records.forEach(record => {
+      const rec = document.createElement('div');
+      rec.className = 'search-record-item';
+      const date = new Date(record.created_at);
+      const formattedDate = `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2,'0')}-${date.getDate().toString().padStart(2,'0')} ${date.getHours().toString().padStart(2,'0')}:${date.getMinutes().toString().padStart(2,'0')}`;
+      const userPreview = (record.user_message || '').length > 30 ? (record.user_message.substring(0,30)+'...') : (record.user_message || '');
+      rec.innerHTML = `
+        <div class="search-header">自定义智能体 <span>${formattedDate}</span></div>
+        <div class="record-preview user-msg">${userPreview}</div>
+      `;
+      rec.addEventListener('click', () => {
+        clearChat();
+        appendMessage('user', record.user_message);
+        appendMessage('bot', record.assistant_message);
+      });
+      historyList.appendChild(rec);
+    });
+
+  } catch (err) {
+    console.error('loadCustomAgentHistoryToSidebar 捕获异常', err);
+  }
+}
+
+/* ---------- 搜索历史记录 ---------- */
+async function searchCustomAgentChatHistory() {
+  try {
+    const searchInput = document.getElementById('searchInputSidebar').value.trim().toLowerCase();
+    
+    // 如果搜索框为空，则加载所有历史记录
+    if (!searchInput) {
+      loadCustomAgentHistoryToSidebar();
+      return;
+    }
+    
+    const client = getSupabaseClient();
+    if (!client) {
+      console.error("Supabase未初始化，无法搜索历史记录");
+      return;
+    }
+
+    // 获取用户信息
+    let userId = null;
+    if (client.auth && typeof client.auth.getSession === 'function') {
+      const { data: sessionData } = await client.auth.getSession();
+      userId = sessionData?.session?.user?.id;
+    }
+    if (!userId) {
+      console.error("未登录用户，无法搜索历史记录");
+      return;
+    }
+
+    // 清空当前历史记录列表
+    const historyList = document.getElementById('historyListSidebar');
+    historyList.innerHTML = '';
+    
+    // 查询匹配的聊天记录
+    const { data: records, error } = await client
+      .from('conversations_add')
+      .select('id, created_at, user_message, assistant_message')
+      .eq('user_id', userId)
+      .or(`user_message.ilike.%${searchInput}%,assistant_message.ilike.%${searchInput}%`)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (error) {
+      console.error("搜索历史记录失败:", error);
+      historyList.innerHTML = '<div style="padding:15px;color:#666;">搜索历史记录失败</div>';
+      return;
+    }
+
+    if (!records || records.length === 0) {
+      historyList.innerHTML = '<div style="padding:15px;color:#666;">未找到匹配的历史记录</div>';
+      return;
+    }
+
+    // 渲染搜索结果
+    records.forEach(record => {
+      const recordItem = document.createElement('div');
+      recordItem.classList.add('search-record-item');
       
-      <span id="loadingIcon" style="display:none;">...</span>
-    </button>
-    <button id="clearBtn" onclick="clearChat()">
-      <i class="fas fa-trash-alt"></i>
-      <span>清除聊天</span>
-    </button>
-  </div>
+      // 格式化时间
+      const date = new Date(record.created_at);
+      const formattedDate = `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+      
+      // 截取预览内容
+      const userPreview = record.user_message.length > 30 ? 
+        record.user_message.substring(0, 30) + '...' : 
+        record.user_message;
+      
+      recordItem.innerHTML = `
+        <div class="search-header">
+          自定义智能体 <span>${formattedDate}</span>
+        </div>
+        <div class="record-preview user-msg">${userPreview}</div>
+      `;
+      
+      // 点击记录项查看完整对话
+      recordItem.addEventListener('click', () => {
+        // 清空当前聊天
+        clearChat();
+        
+        // 添加历史消息到聊天框
+        appendMessage('user', record.user_message);
+        appendMessage('bot', record.assistant_message);
+      });
+      
+      historyList.appendChild(recordItem);
+    });
+  } catch (error) {
+    console.error("搜索历史记录时出错:", error);
+  }
+}
+
+/* ---------- 导出历史记录为CSV ---------- */
+async function exportCustomAgentHistoryToCSV() {
+  try {
+    const client = getSupabaseClient();
+    if (!client) {
+      alert("Supabase未初始化，无法导出历史记录");
+      return;
+    }
+
+    // 获取用户信息
+    let userId = null;
+    if (client.auth && typeof client.auth.getSession === 'function') {
+      const { data: sessionData } = await client.auth.getSession();
+      userId = sessionData?.session?.user?.id;
+    }
+    if (!userId) {
+      alert('请先登录');
+      return;
+    }
+
+    // 查询自定义智能体的聊天记录
+    const { data: records, error } = await client
+      .from('conversations_add')
+      .select('created_at, user_message, assistant_message')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    if (!records || records.length === 0) {
+      alert('没有自定义智能体的历史记录可导出');
+      return;
+    }
+
+    // 构造CSV内容
+    let csvContent = '时间,用户消息,智能体回复\n';
+    records.forEach(record => {
+      const time = record.created_at ? new Date(record.created_at).toLocaleString() : '';
+      // 处理CSV中的引号转义
+      const userMsg = record.user_message ? `"${record.user_message.replace(/"/g, '""')}"` : '';
+      const assistantMsg = record.assistant_message ? `"${record.assistant_message.replace(/"/g, '""')}"` : '';
+      csvContent += `${time},${userMsg},${assistantMsg}\n`;
+    });
+
+    // 创建下载链接
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `自定义智能体聊天记录_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url); // 释放资源
+
+  } catch (error) {
+    console.error('导出自定义智能体历史记录失败:', error);
+    alert('导出失败: ' + error.message);
+  }
+}
+
+/* ---------- 延迟初始化 Supabase ---------- */
+setTimeout(() => {
+  initSupabaseAndLoad();
+}, 500);
+    </script>
 </div>
   
 <script>
@@ -888,7 +1163,11 @@ button:disabled {
   }
 
   // 消息气泡样式增强 
-  function appendMessage(sender, text) { 
+  function appendMessage(sender, text, targetContainer = null) { 
+    // 优先使用指定容器，否则使用默认容器
+    const container = targetContainer || chat;
+    if (!container) return;
+    
     const msgDiv = document.createElement('div'); 
     msgDiv.classList.add('message'); 
     msgDiv.classList.add(sender === 'user' ? 'user' : 'bot'); 
@@ -903,12 +1182,14 @@ button:disabled {
     const contentDiv = document.createElement('div'); 
     contentDiv.classList.add('message-content'); 
     
-    // 添加消息头（发件人和时间） 
+    // 添加消息头（发件人和时间）
     const headerDiv = document.createElement('div'); 
     headerDiv.classList.add('message-header'); 
     
     const agents = loadAgents(); 
-    const agentName = agents.length > 0 && sender !== 'user' ? agents[agentSelect.value].name : '你'; 
+    const idx = Number(agentSelect.value);
+    const agentSafe = agents[idx] || agents[0];
+    const agentName = agentSafe && sender !== 'user' ? (agentSafe.name || 'AI') : 'AI'; 
     headerDiv.innerHTML = `<span>${agentName}</span><span>${getCurrentTime()}</span>`; 
     contentDiv.appendChild(headerDiv); 
     
@@ -919,11 +1200,11 @@ button:disabled {
     contentDiv.appendChild(textDiv); 
     
     msgDiv.appendChild(contentDiv); 
-    chat.appendChild(msgDiv); 
-    chat.scrollTop = chat.scrollHeight; 
+    container.appendChild(msgDiv); 
+    container.scrollTop = container.scrollHeight; 
   } 
 
-  // 显示正在输入状态 
+  // 显示正在输入状态
   function showTypingIndicator() { 
     const typingDiv = document.createElement('div'); 
     typingDiv.classList.add('typing-indicator'); 
@@ -942,7 +1223,7 @@ button:disabled {
     chat.scrollTop = chat.scrollHeight; 
   } 
   
-  // 隐藏正在输入状态 
+  // 隐藏正在输入状态
   function hideTypingIndicator() { 
     const typingIndicator = document.getElementById('typingIndicator'); 
     if(typingIndicator) { 
@@ -950,31 +1231,35 @@ button:disabled {
     } 
   } 
 
+  // 更详细的 sendMessage（替换原来的 sendMessage） 
   async function sendMessage() { 
     const text = input.value.trim(); 
     const agents = loadAgents(); 
-    
+
     if (agents.length === 0) { 
       alert("请先创建一个智能体"); 
       showAgentForm(); 
       return; 
     } 
-    
+
     if (!text) return; 
-    
-    const selectedAgent = agents[agentSelect.value]; 
-    
+
+    const idx = Number(agentSelect.value);
+    const selectedAgent = agents[idx] || agents[0]; 
+
+    // 记录 UI 上的消息 
     appendMessage('user', text); 
     input.value = ''; 
     sendBtn.disabled = true; 
     loadingIcon.style.display = 'inline'; 
     input.style.opacity = '0.7'; 
     input.disabled = true; 
-    
-    // 显示正在输入 
+
     showTypingIndicator(); 
-    
+
     try { 
+      console.log('sendMessage: 发送到 LLM，输入 text:', text, 'agentPrompt:', selectedAgent?.prompt); 
+
       const response = await fetch(API_URL, { 
         method: 'POST', 
         headers: { 
@@ -991,19 +1276,60 @@ button:disabled {
           max_tokens: 2000 
         }) 
       }); 
-  
+
       if (!response.ok) throw new Error(`请求失败: HTTP ${response.status}`); 
-      
+
       const data = await response.json(); 
-      const reply = data.choices?.[0]?.message?.content || '无回复内容'; 
-      
+      const reply = data.choices?.[0]?.message?.content ?? '无回复内容'; 
+
       hideTypingIndicator(); 
       appendMessage('bot', reply); 
-  
+
+      // ***** 关键：在这里增加明确日志，确认保存被调用 ***** 
+      console.log('sendMessage: call saveCustomAgentChatRecord with', { userMsg: text, botMsg: reply }); 
+
+      const saveResult = await saveCustomAgentChatRecord(text, reply); 
+
+      console.log('sendMessage: saveResult =>', saveResult); 
+
+      // 如果保存出错，尝试直接用 supabase 插入以检查运行时环境是否与控制台插入不同 
+      if (saveResult?.error) { 
+        console.warn('sendMessage: 初次保存失败，尝试直接插入以检测问题:', saveResult.error); 
+        try { 
+          const client = getSupabaseClient();
+          if (!client) {
+            console.error('sendMessage: 无法获取 Supabase 客户端');
+            return;
+          }
+          
+          const { data: sessionData, error: sessionErr } = await client.auth.getSession();
+          const userId = sessionData?.session?.user?.id;
+          
+          const { data: directData, error: directError } = await client 
+            .from('conversations_add') 
+            .insert([{ 
+              user_id: userId, 
+              user_message: text, 
+              assistant_message: reply 
+            }]) 
+            .select(); 
+
+          console.log('sendMessage: 直接插入结果', { directData, directError }); 
+          if (directError) { 
+            console.error('sendMessage: 直接插入也失败', directError); 
+          } else { 
+            console.log('sendMessage: 直接插入成功', directData); 
+            loadCustomAgentHistoryToSidebar(); 
+          } 
+        } catch (ie) { 
+          console.error('sendMessage: 直接插入捕获异常', ie); 
+        } 
+      } 
+
     } catch (error) { 
       hideTypingIndicator(); 
       appendMessage('bot', `错误: ${error.message}`); 
-      console.error('API请求错误:', error); 
+      console.error('sendMessage - API请求错误:', error); 
     } finally { 
       sendBtn.disabled = false; 
       loadingIcon.style.display = 'none'; 
@@ -1018,23 +1344,49 @@ button:disabled {
     chat.innerHTML = ''; 
   } 
 
-  // 初始化事件监听器 
-  function initEventListeners() { 
-    sendBtn.addEventListener('click', sendMessage); 
-    // 添加返回按钮事件
-    document.getElementById('backToChat').addEventListener('click', function() {
-      window.location.href = 'index.html?show=chat';
+  // 导出自定义智能体历史记录为CSV
+  function exportCustomAgentHistoryToCSV() {
+    const historyItems = document.querySelectorAll("#historyListSidebar .search-record-item");
+    if (!historyItems.length) {
+      alert("没有可导出的记录");
+      return;
+    }
+
+    let csvContent = "data:text/csv;charset=utf-8,时间,用户消息,AI回复\n";
+
+    historyItems.forEach(item => {
+      const time = item.dataset.time || "";
+      const userMsg = (item.dataset.user || "").replace(/\n/g, " ");
+      const botMsg = (item.dataset.bot || "").replace(/\n/g, " ");
+      csvContent += `"${time}","${userMsg}","${botMsg}"\n`;
+    });
+
+    // 下载
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "custom_agent_history.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  // 初始化事件监听器
+  function initEventListeners() {
+    sendBtn.addEventListener('click', sendMessage);
+    
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
     });
     
-    document.getElementById('saveBtn').addEventListener('click', saveAgent); 
-    
-    input.addEventListener('keydown', e => { 
-      if (e.key === 'Enter' && !e.shiftKey) { 
-        e.preventDefault(); 
-        sendMessage(); 
-      } 
-    }); 
-  } 
+    // 更新历史记录相关事件
+    document.getElementById('exportHistoryBtn').addEventListener('click', exportCustomAgentHistoryToCSV);
+    document.getElementById('refreshHistoryBtnSidebar').addEventListener('click', () => loadCustomAgentHistoryToSidebar());
+    document.getElementById('searchInputSidebar').addEventListener('input', searchCustomAgentChatHistory);
+  }
 
   // 初始化示例智能体 
   function initSampleAgents() { 
@@ -1096,15 +1448,24 @@ button:disabled {
     initSampleAgents();
     renderAgentOptions();
     initEventListeners();
+    // 移除这里的历史记录加载，因为已经在 Supabase 初始化完成后加载
     
     // 添加示例对话
     setTimeout(() => {
       appendMessage('bot', '您好！我是您的AI助手，欢迎使用智能体对话系统。请从上方选择或创建您想要的智能体类型开始对话。');
     }, 500);
   }
+  
+  // 加载聊天历史记录
+  function loadChatHistory() {
+    // 补充具体实现逻辑
+  }
 
-  // 页面加载完成后初始化应用
-  document.addEventListener('DOMContentLoaded', initApp);
+  // 保存聊天记录
+
+
+  // 启动应用
+  initApp();
 </script>
 </body>
 </html>

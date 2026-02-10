@@ -391,6 +391,13 @@ body.eye-theme .export-btn-sidebar:hover {
   flex-direction: column;
   padding: 10px 20px;
   overflow: hidden;
+  position: relative;
+  padding-right: 20px; /* 恢复原始padding，因为按钮已移到顶部 */
+}
+
+/* 移除原来的按钮样式，改为在chat-controls中定义 */
+.chat-main .agent-buttons-container {
+  display: none; /* 隐藏原位置的按钮容器 */
 }
 
 #app {
@@ -425,8 +432,39 @@ body.eye-theme .export-btn-sidebar:hover {
 
 .chat-controls {
   display: flex;
-  gap: 10px;
   align-items: center;
+  gap: 8px;
+}
+
+/* 自定义智能体按钮样式 */
+.chat-controls #newPageBtn4 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background-color: #2575fc;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.3s, transform 0.2s;
+  margin-right: 8px;
+}
+
+.chat-controls #newPageBtn4:hover {
+  background-color: #1d5fc0;
+  transform: translateY(-1px);
+}
+
+.chat-controls #newPageBtn4 i {
+  font-size: 16px;
+}
+
+/* 确保API选择器和按钮并排显示 */
+.chat-controls .api-selector {
+  margin-left: 10px;
+  display: inline-block;
 }
 
 h1 {
@@ -2061,53 +2099,6 @@ body.eye-theme .record-count {
   border-radius: 3px;
   font-weight: bold;
   color: #333;
-}
-
-/* 右侧智能体按钮容器样式 */
-.agent-buttons-container {
-  position: fixed;
-  right: 5px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-  z-index: 90;
-}
-
-/* 智能体按钮样式 */
-.agent-buttons-container button {
-  width: 70px;  /* 增加按钮宽度以容纳下方文本 */
-  height: 60px; /* 增加按钮高度以容纳下方文本 */
-  border-radius: 10px; /* 改为圆角矩形 */
-  border: none;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column; /* 垂直排列图标和文本 */
-  align-items: center;
-  justify-content: center;
-  font-size: 24px; /* 图标大小 */
-  color: white;
-  background: linear-gradient(135deg, #6a11cb, #2575fc);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-  transition: all 0.3s;
-  padding: 10px;
-}
-
-/* 按钮文本样式 */
-.agent-buttons-container button span {
-  margin-top: 8px; /* 文本与图标间距 */
-  font-size: 10px; /* 小字显示 */
-  font-weight: 400;
-  white-space: nowrap;
-  opacity: 1; /* 始终显示文本 */
-}
-
-/* 按钮悬停效果 - 保持简洁 */
-.agent-buttons-container button:hover {
-  transform: translateY(-3px); /* 轻微上浮效果 */
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
-  background: linear-gradient(135deg, #2575fc, #6a11cb);
 }
 
 /* 返回聊天按钮样式 */

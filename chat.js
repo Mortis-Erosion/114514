@@ -1,6 +1,61 @@
 // 聊天系统相关功能
 // 聊天功能实现
 // 聊天系统相关变量
+let cachedUserId = null; // 缓存用户ID
+let agentBusy = false; // 智能体操作锁
+
+// 统一的 Supabase 调用包装器
+async function safeSupabaseCall(fn, unlockUI) {
+  try {
+    return await fn();
+  } catch (e) {
+    console.error("Supabase 调用失败:", e);
+    throw e;
+  } finally {
+    if (typeof unlockUI === 'function') {
+      try { unlockUI(); } catch (err) { console.warn("解锁 UI 失败:", err); }
+    }
+  }
+}
+
+// 获取用户ID（仅从缓存获取）
+function getUserId() {
+  return cachedUserId;
+}
+
+// 获取 Supabase 客户端（仅返回全局实例，不再负责初始化）
+function getSupabaseClient() {
+  if (typeof window.supabase !== 'undefined' && window.supabase) {
+    return window.supabase;
+  }
+  console.error('Supabase 客户端尚未初始化');
+  return null;
+}
+
+// 统一初始化 Auth 状态
+async function initAuthState() {
+  const client = getSupabaseClient();
+  if (!client || !client.auth) return;
+
+  try {
+    // 1. 获取初始 Session (只在此处调用一次)
+    const { data: { session } } = await client.auth.getSession();
+    cachedUserId = session?.user?.id || null;
+    console.log("初始 Auth 状态已加载:", cachedUserId ? "已登录" : "未登录");
+
+    // 2. 监听后续状态变化
+    client.auth.onAuthStateChange((event, session) => {
+      console.log("Auth 状态变更:", event);
+      if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+        cachedUserId = null;
+      } else if (session?.user) {
+        cachedUserId = session.user.id;
+      }
+    });
+  } catch (e) {
+    console.error("初始化 Auth 状态失败:", e);
+  }
+}
 
 // 初始化语音控制开关
 function initVoiceToggle() {
@@ -11,9 +66,9 @@ function initVoiceToggle() {
   const voiceToggle = document.createElement('button');
   voiceToggle.id = 'voiceToggle';
   voiceToggle.className = 'voice-btn';
-  voiceToggle.innerHTML = '<i class="fas fa-volume-up"></i> 语音回复';
+  voiceToggle.innerHTML = '<i class="fas fa-volume-mute"></i> 关闭语音';
   voiceToggle.title = '开启/关闭语音回复';
-  voiceToggle.dataset.enabled = 'true'; // 默认开启
+  voiceToggle.dataset.enabled = 'false';
 
   // 添加点击事件
   voiceToggle.addEventListener('click', function() {
@@ -44,6 +99,14 @@ function initVoiceToggle() {
     }
   }
   voiceControls.appendChild(voiceToggle);
+}
+
+function normalizeRole(role, fallback) {
+  const value = (role || '').toString().toLowerCase();
+  if (value === 'assistant' || value === 'bot' || value === 'ai') return 'bot';
+  if (value === 'user' || value === 'human') return 'user';
+  if (value === 'system') return 'system';
+  return fallback;
 }
 
 // ====== 语音播报核心函数 ======
@@ -192,14 +255,16 @@ async function saveDocumentAnalysis(docData) {
 // 从数据库加载用户头像
 async function updateUserAvatarFromDB() {
   try {
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    if (authError || !authData?.user) {
+    const userId = await getUserId();
+    if (!userId) {
       console.warn("未登录，无法加载头像");
       return;
     }
 
-    const userId = authData.user.id;
-    const { data: userInfo, error: userError } = await supabase
+    const client = getSupabaseClient();
+    if (!client) return;
+
+    const { data: userInfo, error: userError } = await client
       .from('users')
       .select('avatar_url')
       .eq('id', userId)
@@ -384,12 +449,14 @@ function typeWriterEffect(text, elementId, speed = 50) {
         window.chatState.currentTypeWriterElement = null;
         
         // 判断用户是否在底部（允许一点误差，比如 20px）
-        const chat = window.chatElements.chat;
-        const isAtBottom = chat.scrollTop + chat.clientHeight >= chat.scrollHeight - 20;
-        
-        // 只有在用户已经在底部时才自动滚动
-        if (isAtBottom) {
-          chat.scrollTop = chat.scrollHeight;
+        if (window.chatElements && window.chatElements.chat) {
+          const chat = window.chatElements.chat;
+          const isAtBottom = chat.scrollTop + chat.clientHeight >= chat.scrollHeight - 20;
+          
+          // 只有在用户已经在底部时才自动滚动
+          if (isAtBottom) {
+            chat.scrollTop = chat.scrollHeight;
+          }
         }
       }
     } catch (error) {
@@ -403,7 +470,13 @@ function typeWriterEffect(text, elementId, speed = 50) {
 }
 
 // 添加消息
-function appendMessage(sender, text) {
+function appendMessage(sender, text, targetContainer = null, options = {}) {
+  // 优先使用指定容器，否则使用默认容器
+  const container = targetContainer || (window.chatElements?.chat || document.getElementById('chat'));
+  if (!container) return;
+  const useTypewriter = !!options.useTypewriter;
+  const useSpeech = !!options.useSpeech;
+
   // 创建消息容器
   const msgDiv = document.createElement('div');
   msgDiv.classList.add('message', sender === 'user' ? 'user' : 'bot');
@@ -429,74 +502,75 @@ function appendMessage(sender, text) {
   contentDiv.textContent = text;
 
   // 组装消息元素
-  msgDiv.appendChild(avatarImg);
-  msgDiv.appendChild(contentDiv);
+    msgDiv.appendChild(avatarImg);
+    msgDiv.appendChild(contentDiv);
 
-  // 撤回按钮只对用户消息开放
-  if (sender === 'user') {
-    // 创建一个容器来放置消息内容和撤回按钮
-    const messageContainer = document.createElement('div');
-    messageContainer.classList.add('user-message-container');
-    
-    // 重新组织DOM结构
-    msgDiv.removeChild(contentDiv);
-    messageContainer.appendChild(contentDiv);
-    msgDiv.appendChild(messageContainer);
-    
-    // 创建撤回按钮
-    const recallBtn = document.createElement('button');
-    recallBtn.className = 'recall-btn';
-    recallBtn.textContent = '撤回';
-    
-    recallBtn.addEventListener('click', () => {
-      // 获取下一条消息
-      const nextMsg = msgDiv.nextElementSibling;
+    // 撤回按钮只对用户消息开放
+    if (sender === 'user') {
+      // 创建一个容器来放置消息内容和撤回按钮
+      const messageContainer = document.createElement('div');
+      messageContainer.classList.add('user-message-container');
       
-      // 如果下一条是机器人的回复，一并删除
-      if (nextMsg && nextMsg.classList.contains('bot')) {
-        window.chatElements.chat.removeChild(nextMsg);
+      // 重新组织DOM结构
+      msgDiv.removeChild(contentDiv);
+      messageContainer.appendChild(contentDiv);
+      msgDiv.appendChild(messageContainer);
+      
+      // 创建撤回按钮
+      const recallBtn = document.createElement('button');
+      recallBtn.className = 'recall-btn';
+      recallBtn.textContent = '撤回';
+      
+      recallBtn.addEventListener('click', () => {
+        // 获取下一条消息
+        const nextMsg = msgDiv.nextElementSibling;
         
-        // 同时从聊天历史中删除机器人回复
-        if (window.chatState.chatHistory.length > 0) {
-          const lastItem = window.chatState.chatHistory[window.chatState.chatHistory.length - 1];
-          if (lastItem && lastItem.answer) {
-            lastItem.answer = '';
+        // 如果下一条是机器人的回复，一并删除
+        if (nextMsg && nextMsg.classList.contains('bot')) {
+          container.removeChild(nextMsg);
+          
+          // 同时从聊天历史中删除机器人回复
+          if (window.chatState.chatHistory.length > 0) {
+            const lastItem = window.chatState.chatHistory[window.chatState.chatHistory.length - 1];
+            if (lastItem && lastItem.answer) {
+              lastItem.answer = '';
+            }
           }
         }
-      }
-      
-      // 删除当前用户消息
-      window.chatElements.chat.removeChild(msgDiv);
-      
-      // 从聊天历史中删除
-      if (window.chatState.chatHistory.length > 0) {
-        const lastItem = window.chatState.chatHistory[window.chatState.chatHistory.length - 1];
-        if (lastItem && lastItem.answer === '') {
-          window.chatState.chatHistory.pop();
-          updateHistoryList();
+        
+        // 删除当前用户消息
+        container.removeChild(msgDiv);
+        
+        // 从聊天历史中删除
+        if (window.chatState.chatHistory.length > 0) {
+          const lastItem = window.chatState.chatHistory[window.chatState.chatHistory.length - 1];
+          if (lastItem && lastItem.answer === '') {
+            window.chatState.chatHistory.pop();
+            updateHistoryList();
+          }
         }
-      }
-    });
-    
-    messageContainer.appendChild(recallBtn);
+      });
+      
+      messageContainer.appendChild(recallBtn);
   }
 
   // 添加到聊天区域
-  const chat = window.chatElements.chat;
   
   // 判断用户是否在底部（允许一点误差，比如 20px）
-  const isAtBottom = chat.scrollTop + chat.clientHeight >= chat.scrollHeight - 20;
+  const isAtBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 20;
   
-  chat.appendChild(msgDiv);
+  container.appendChild(msgDiv);
   
   // 只有在用户已经在底部时才自动滚动
   if (isAtBottom) {
-    chat.scrollTop = chat.scrollHeight;
+    container.scrollTop = container.scrollHeight;
   }
 
   // 处理机器人消息的打字机效果和语音播报
-  if (sender === 'bot') {
+  if (sender === 'bot' && useTypewriter) {
     typeWriterEffect(text, contentDiv.id, 50);
+  }
+  if (sender === 'bot' && useSpeech) {
     speak(text);
   }
 
@@ -509,41 +583,47 @@ function appendMessage(sender, text) {
       answer: ''
     });
   } else if (sender === 'bot' && window.chatState.chatHistory.length > 0) {
-    const currentText = text;
-    setTimeout(() => {
-      const lastItem = window.chatState.chatHistory[window.chatState.chatHistory.length - 1];
-      if (lastItem) {
-        lastItem.answer = currentText;
-        updateHistoryList();
-      }
-    }, text.length * 50);
+    const lastItem = window.chatState.chatHistory[window.chatState.chatHistory.length - 1];
+    if (!lastItem) return;
+    if (useTypewriter) {
+      const currentText = text;
+      setTimeout(() => {
+        const latestItem = window.chatState.chatHistory[window.chatState.chatHistory.length - 1];
+        if (latestItem) {
+          latestItem.answer = currentText;
+          updateHistoryList();
+        }
+      }, text.length * 50);
+    } else {
+      lastItem.answer = text;
+      updateHistoryList();
+    }
   }
   
-  // 如果是机器人消息，重置停止状态
-  if (sender === 'bot') {
-    window.chatState.typeWriterTimer = null;
-    window.chatState.currentTypeWriterElement = null;
-  }
+  // 不需要在此处重置打字机状态，让typeWriterEffect函数自行处理
+  // 这样停止思考功能才能正确停止打字机效果
 }
 
 // 保存对话记录到Supabase
 async function saveChatRecord(userMessage, botMessage) {
   try {
-    const { data: userData, error: userError } = await supabase.auth.getUser();
+    const userId = await getUserId();
     
     // 增强错误处理
-    if (userError || !userData || !userData.user) {
+    if (!userId) {
       console.error('保存失败: 用户未登录或会话无效');
       return;
     }
     
-    const { data, error } = await supabase
+    const client = getSupabaseClient();
+    if (!client) return;
+    
+    const { data, error } = await client
       .from('conversations') // 确保表名正确
       .insert([{
-        user_id: userData.user.id,
+        user_id: userId,
         user_message: userMessage,
-        assistant_message: botMessage,
-        created_at: new Date().toISOString()
+        assistant_message: botMessage
       }]);
 
     if (error) {
@@ -663,7 +743,7 @@ async function sendMessage() {
       window.chatState.contextHistory.splice(0, 2);
     }
 
-    appendMessage('bot', reply);
+    appendMessage('bot', reply, null, { useTypewriter: true, useSpeech: true });
     await saveChatRecord(window.chatState.lastUserMessage, reply);
   } catch (error) {
     if (error.name === 'AbortError') {
@@ -682,11 +762,12 @@ async function sendMessage() {
   }
 }
 
-// 创建停止思考函数
+// 创建停止思考函数 - 确保能停止打字机效果
 function stopThinking() {
   // 1. 停止API请求
   if (window.chatState.abortController) {
     window.chatState.abortController.abort();
+    window.chatState.abortController = null;
   }
   
   // 2. 停止打字机效果
@@ -695,21 +776,24 @@ function stopThinking() {
     window.chatState.typeWriterTimer = null;
     
     // 直接显示完整文本
-    if (window.chatState.currentTypeWriterElement) {
-      window.chatState.currentTypeWriterElement.textContent = 
-        window.chatState.currentTypeWriterText;
+    if (window.chatState.currentTypeWriterElement && window.chatState.currentTypeWriterText) {
+      window.chatState.currentTypeWriterElement.textContent = window.chatState.currentTypeWriterText;
       window.chatState.currentTypeWriterElement = null;
+      window.chatState.currentTypeWriterText = null;
     }
   }
   
   // 3. 停止语音播报
-  if (window.speechSynthesis) {
+  if (window.speechSynthesis && window.speechSynthesis.speaking) {
     window.speechSynthesis.cancel();
   }
   
   // 4. 重置UI状态
-  window.chatElements.loader.style.display = 'none';
+  if (window.chatElements && window.chatElements.loader) {
+    window.chatElements.loader.style.display = 'none';
+  }
   window.chatState.isLoading = false;
+  window.chatState.pauseResponse = true;
 }
 
 // 更新历史记录列表
@@ -746,21 +830,22 @@ function updateHistoryList() {
 
 // 事件处理函数
 function handleBodyClick(e) {
-  if (e.target === window.chatElements.historyBtn) {
+  const btn = e.target?.closest?.('button') || null;
+  if (btn && btn === window.chatElements.historyBtn) {
     window.chatElements.historyModal.style.display = 'block';
-  } else if (e.target === window.chatElements.closeBtn) {
+  } else if (e.target === window.chatElements.closeBtn || e.target?.closest?.('.close-btn') === window.chatElements.closeBtn) {
     window.chatElements.historyModal.style.display = 'none';
-  } else if (e.target === window.chatElements.closeUserInfoBtn) {
+  } else if (e.target === window.chatElements.closeUserInfoBtn || e.target?.closest?.('.close-user-info') === window.chatElements.closeUserInfoBtn) {
     window.chatElements.userInfoModal.style.display = 'none';
-  } else if (e.target === window.chatElements.userInfoBtn) {
+  } else if (btn && btn === window.chatElements.userInfoBtn) {
     if (window.showUserInfo) window.showUserInfo();
-  } else if (e.target === window.chatElements.newPageBtn || e.target.parentNode === window.chatElements.newPageBtn) {
+  } else if (btn && btn === window.chatElements.newPageBtn) {
     window.open('translator.html', '_blank');
-  } else if (e.target === window.chatElements.newPageBtn2 || e.target.parentNode === window.chatElements.newPageBtn2) {
+  } else if (btn && btn === window.chatElements.newPageBtn2) {
     window.open('blank.html', '_blank');
-  } else if (e.target === window.chatElements.newPageBtn3 || e.target.parentNode === window.chatElements.newPageBtn3) {
+  } else if (btn && btn === window.chatElements.newPageBtn3) {
     window.open('blank1.html', '_blank');
-  } else if (e.target === window.chatElements.newPageBtn4 || e.target.parentNode === window.chatElements.newPageBtn4) {
+  } else if (btn && btn === window.chatElements.newPageBtn4) {
     // 移除原代码：window.open('blank2.html', '_blank');
     // 添加新代码
     loadCustomAgentInPage();
@@ -836,8 +921,7 @@ async function handleFile(event) {
              user_id: userData.user.id, 
              file_name: fileName, 
              file_content: recognizedText, 
-             analysis_result: '', 
-             created_at: new Date().toISOString() 
+             analysis_result: ''
            }]); 
 
          if (error) { 
@@ -1172,8 +1256,11 @@ function initVoiceRecognition() {
 }
 
 // 初始化聊天事件
-function initChatEvents() {
-  if (window.chatInitFlags.chatEventsInitialized) return;
+  async function initChatEvents() {
+    if (window.chatInitFlags.chatEventsInitialized) return;
+
+    // 先初始化 Auth 状态
+    await initAuthState();
 
   window.chatElements.chat = document.getElementById('chat');
   window.chatElements.input = document.getElementById('input');
@@ -1196,6 +1283,10 @@ function initChatEvents() {
     window.chatElements.apiSelect = document.getElementById('apiSelect');
   // 添加API选择器元素
   window.chatElements.apiSelect = document.getElementById('apiSelect');
+
+  if (window.chatElements.loader) {
+    window.chatElements.loader.style.display = 'none';
+  }
 
   // 添加语音识别初始化
   initVoiceRecognition();
@@ -1226,7 +1317,7 @@ function initChatEvents() {
 
 // 清理聊天事件
 function removeChatEvents() {
-  document.body.removeEventListener('click', handleBodyClick);
+  document.removeEventListener('click', handleBodyClick);
   if (window.chatElements.sendBtn) window.chatElements.sendBtn.removeEventListener('click', sendMessage);
   if (window.chatElements.input) window.chatElements.input.removeEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -1237,11 +1328,13 @@ function removeChatEvents() {
   window.chatInitFlags.chatEventsInitialized = false;
 }
 
-// 确保DOM已加载
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initChatEvents);
-} else {
-  initChatEvents();
+// 确保DOM已加载 - 只初始化一次
+if (!window.chatInitFlags.chatEventsInitialized) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initChatEvents);
+  } else {
+    initChatEvents();
+  }
 }
 
 // 重置对话上下文
@@ -1265,108 +1358,74 @@ function addResetButton() {
 
 // 加载自定义智能体到当前页面
 function loadCustomAgentInPage() {
-  console.log('loadCustomAgentInPage 函数被调用');
-  // 创建覆盖层容器
-  const overlay = document.createElement('div');
-  overlay.id = 'customAgentOverlay';
-  overlay.style.position = 'fixed';
-  overlay.style.top = '0';
-  overlay.style.left = '0';
-  overlay.style.width = '100%';
-  overlay.style.height = '100%';
-  overlay.style.backgroundColor = 'white';
-  overlay.style.zIndex = '9999';
-  overlay.style.display = 'flex';
-  overlay.style.flexDirection = 'column';
-  overlay.style.padding = '20px';
+  console.log('loadCustomAgentInPage (modal) 被调用');
+  window.chatState.previousContextHistory = Array.isArray(window.chatState.contextHistory)
+    ? window.chatState.contextHistory.map(item => ({ ...item }))
+    : [];
 
-  // 创建返回按钮
-  const backBtn = document.createElement('button');
-  backBtn.id = 'backToChatFromAgent';
-  backBtn.innerHTML = '<i class="fas fa-arrow-left"></i> 返回聊天';
-  backBtn.style.marginBottom = '20px';
-  backBtn.style.backgroundColor = '#f1f5f9';
-  backBtn.style.color = '#4a5568';
-  backBtn.style.padding = '10px 15px';
-  backBtn.style.border = 'none';
-  backBtn.style.borderRadius = '5px';
-  backBtn.style.cursor = 'pointer';
-  backBtn.addEventListener('click', function() {
-    document.body.removeChild(overlay);
+  const existingBackdrop = document.getElementById('customAgentBackdrop');
+  if (existingBackdrop) {
+    try { existingBackdrop.remove(); } catch (_) {}
+  }
+
+  // 1) 创建遮罩层
+  const backdrop = document.createElement('div');
+  backdrop.id = 'customAgentBackdrop';
+  Object.assign(backdrop.style, {
+    position: 'fixed', top:0, left:0, right:0, bottom:0,
+    background: 'rgba(0,0,0,0.45)', display:'flex',
+    alignItems:'center', justifyContent:'center', zIndex: 10000,
+    padding: '20px', overflow: 'auto'
   });
 
-  overlay.appendChild(backBtn);
+  // 2) 克隆 template
+  const tpl = document.getElementById('customAgentTemplate');
+  if (!tpl) {
+    console.error('customAgentTemplate 未找到 —— 请确保 index.html 已加入 template');
+    return;
+  }
+  const clone = tpl.content.cloneNode(true);
 
-  // 创建加载指示器
-  const loader = document.createElement('div');
-  loader.className = 'loader';
-  loader.innerHTML = '<span></span><span></span><span></span>';
-  loader.style.margin = 'auto';
-  overlay.appendChild(loader);
+  // 3) 把克隆体包到容器里（方便后续查找）
+  const container = document.createElement('div');
+  container.className = 'custom-agent-container';
+  Object.assign(container.style, { width: '100%', maxWidth:'1100px', maxHeight: '96vh', background: 'transparent' });
+  container.appendChild(clone);
 
-  // 添加到页面
-  document.body.appendChild(overlay);
-  console.log('覆盖层已添加到页面');
+  // 4) 把容器插入到遮罩并显示
+  backdrop.appendChild(container);
+  document.body.appendChild(backdrop);
 
-  // 使用相对路径加载 blank2.html 内容
-  const blank2Url = 'blank2.html';
-  console.log('开始加载 blank2.html，URL:', blank2Url);
+  function closeModal() {
+    if (typeof cleanupCustomAgent === 'function') {
+      try { cleanupCustomAgent(container); } catch (e) { console.warn(e); }
+    }
+    document.removeEventListener('keydown', onKey);
+    try { backdrop.remove(); } catch (_) {}
+  }
 
-  fetch(blank2Url)
-    .then(response => {
-      console.log('blank2.html 加载响应状态:', response.status);
-      if (!response.ok) {
-        throw new Error(`HTTP 错误! 状态码: ${response.status}`);
-      }
-      return response.text();
-    })
-    .then(html => {
-      console.log('blank2.html 加载成功，HTML 长度:', html.length);
-      // 打印前50个字符，查看是否正确加载
-      console.log('HTML 内容预览:', html.substring(0, 50) + '...');
-      
-      // 创建一个临时容器来解析 HTML
-      const tempContainer = document.createElement('div');
-      tempContainer.innerHTML = html;
+  // 5) 绑定返回/关闭（使用 container.querySelector）
+  const backBtn = container.querySelector('[data-role="backBtn"]');
+  if (backBtn) backBtn.addEventListener('click', (e) => {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
+    closeModal();
+  });
 
-      // 提取 body 内容
-      // 修改选择器为更简单的 #app
-      const bodyContent = tempContainer.querySelector('#app');
-      console.log('是否找到 #app 元素:', !!bodyContent);
-      if (bodyContent) {
-        // 清空覆盖层
-        overlay.innerHTML = '';
-        overlay.appendChild(backBtn);
-        overlay.appendChild(bodyContent);
+  // 6) 支持 Esc 关闭
+  function onKey(e) {
+    if (e.key === 'Escape') {
+      closeModal();
+    }
+  }
+  document.addEventListener('keydown', onKey);
 
-        // 调整样式
-        bodyContent.style.width = '100%';
-        bodyContent.style.height = 'calc(100% - 60px)';
-        bodyContent.style.maxWidth = '100%';
-        bodyContent.style.maxHeight = 'calc(100% - 60px)';
-
-        // 重新初始化脚本
-        console.log('开始初始化自定义智能体脚本');
-        initCustomAgentScripts(bodyContent);
-      } else {
-        console.error('未找到 #app 元素');
-        // 列出所有子元素，帮助调试
-        const bodyChildren = tempContainer.querySelector('body')?.children;
-        console.log('body 子元素数量:', bodyChildren?.length);
-        if (bodyChildren) {
-          Array.from(bodyChildren).forEach(child => {
-            console.log('body 子元素:', child.tagName, child.id);
-          });
-        }
-        overlay.innerHTML = '<h2>加载失败: 未找到必要的页面元素</h2>';
-        overlay.appendChild(backBtn);
-      }
-    })
-    .catch(error => {
-      console.error('加载自定义智能体失败:', error);
-      overlay.innerHTML = `<h2>加载失败: ${error.message}</h2>`;
-      overlay.appendChild(backBtn);
-    });
+  // 7) 初始化模态内脚本（所有 DOM 查找请在 init 函数中使用 container.querySelector）
+  if (typeof initCustomAgentScripts === 'function') {
+    initCustomAgentScripts(container);
+  } else {
+    console.warn('initCustomAgentScripts 未定义，请把自定义智能体的初始化函数加入 chat.js 或 custom-agent.js');
+  }
 }
 
 // 初始化自定义智能体所需的脚本
@@ -1374,83 +1433,311 @@ function initCustomAgentScripts(container) {
   // 这里需要重新实现 blank2.html 中的脚本功能
   // 由于安全原因，直接使用 eval 不是最佳实践，但为了简单起见，我们可以提取关键功能
 
-  const chat = container.querySelector('#chat');
-  const input = container.querySelector('#input');
-  const sendBtn = container.querySelector('#sendBtn');
-  const agentSelect = container.querySelector('#agentSelect');
-  const loadingIcon = container.querySelector('#loadingIcon');
+  const chat = container.querySelector('[data-role="chat"]');
+  const input = container.querySelector('[data-role="input"]');
+  const sendBtn = container.querySelector('[data-role="sendBtn"]');
+  const agentSelect = container.querySelector('[data-role="agentSelect"]');
+  const loadingIcon = container.querySelector('[data-role="loadingIcon"]');
+  const deleteAgentBtn = container.querySelector('[data-role="deleteAgentBtn"]');
+  const refreshAgentBtn = container.querySelector('[data-role="refreshAgentBtn"]');
 
-  // 读取本地存储的智能体
-  function loadAgents() {
-    return JSON.parse(localStorage.getItem('agents') || '[]');
+  // 预设智能体（硬编码，不可修改/删除）
+  const PRESET_AGENTS = [
+    {
+      name: "技术助手",
+      prompt: "你是一个专业的编程助手，精通多种编程语言，能够帮助用户解决各类技术问题。",
+      id: "preset_tech",
+      isPreset: true
+    },
+    {
+      name: "创意写作伙伴",
+      prompt: "你是一位创意作家，擅长写小说、诗歌和剧本，帮助用户克服创作障碍并激发创意。",
+      id: "preset_creative",
+      isPreset: true
+    }
+  ];
+
+  let allAgents = [...PRESET_AGENTS];
+  let customAgents = [];
+  let refreshSeq = 0;
+
+  // 从 Supabase 加载自定义智能体
+  async function loadCustomAgents() {
+    try {
+      const client = getSupabaseClient();
+      if (!client) {
+        console.warn('Supabase client not available');
+        return { agents: null, error: new Error('no_client') };
+      }
+
+      const userId = getUserId();
+      if (!userId) {
+        return { agents: [], error: null };
+      }
+
+      const { data, error } = await client
+          .from('prompt')
+          .select('id, chara_name, prompt')
+          .eq('user_id', userId)
+          .limit(200);
+
+      if (error) {
+        return { agents: null, error };
+      }
+
+      const agents = (data || []).map(item => ({
+        name: item.chara_name,
+        prompt: item.prompt,
+        id: item.id,
+        isPreset: false
+      }));
+      return { agents, error: null };
+    } catch (err) {
+      console.error('Error in loadCustomAgents:', err);
+      return { agents: null, error: err };
+    }
   }
 
-  function saveAgents(agents) {
-    localStorage.setItem('agents', JSON.stringify(agents));
-    renderAgentOptions();
+  // 刷新智能体列表
+  async function refreshAgents() {
+    const currentSeq = ++refreshSeq;
+    if (refreshAgentBtn) {
+      const icon = refreshAgentBtn.querySelector('i');
+      if (icon) icon.classList.add('fa-spin');
+      refreshAgentBtn.disabled = true; // 防止重复点击
+    }
+    
+    try {
+      const res = await loadCustomAgents();
+      if (currentSeq !== refreshSeq) return;
+      if (!res || res.agents === null) {
+        if (res?.error) console.error('Failed to load custom agents:', res.error);
+        return;
+      }
+
+      customAgents = res.agents;
+      
+      allAgents = [...PRESET_AGENTS, ...customAgents];
+      renderAgentOptions();
+    } catch (e) {
+      console.error("Refresh agents failed:", e);
+    } finally {
+      if (refreshAgentBtn) {
+        const icon = refreshAgentBtn.querySelector('i');
+        if (icon) icon.classList.remove('fa-spin');
+        refreshAgentBtn.disabled = false;
+      }
+    }
+  }
+
+  function loadAgents() {
+    // 兼容旧代码调用，返回当前内存中的所有智能体
+    return allAgents;
   }
 
   function renderAgentOptions() {
-    const agents = loadAgents();
+    const currentVal = agentSelect.value;
     agentSelect.innerHTML = '';
 
-    if (agents.length === 0) {
+    allAgents.forEach((a, i) => {
       const opt = document.createElement('option');
-      opt.textContent = "请创建您的第一个智能体";
-      opt.disabled = true;
+      opt.value = i;
+      opt.textContent = a.name + (a.isPreset ? ' (预设)' : '');
+      // 如果是当前选中的索引，保持选中（需要注意索引变化问题，这里简单处理）
+      if (i.toString() === currentVal) {
+        opt.selected = true;
+      }
       agentSelect.appendChild(opt);
+    });
+    
+    // 更新删除按钮状态
+    updateDeleteButtonState();
+  }
+  
+  function updateDeleteButtonState() {
+    if (!deleteAgentBtn) return;
+    if (!allAgents.length) {
+      deleteAgentBtn.disabled = true;
+      deleteAgentBtn.style.opacity = '0.5';
+      deleteAgentBtn.style.cursor = 'not-allowed';
+      deleteAgentBtn.title = "暂无可删除的智能体";
       return;
     }
 
-    agents.forEach((a, i) => {
-      const opt = document.createElement('option');
-      opt.value = i;
-      opt.textContent = a.name;
-      agentSelect.appendChild(opt);
-    });
+    const selectedIndex = Number(agentSelect.value);
+    const agent = allAgents[selectedIndex] || allAgents[0];
+    
+    if (agent && agent.isPreset) {
+      deleteAgentBtn.disabled = true;
+      deleteAgentBtn.style.opacity = '0.5';
+      deleteAgentBtn.style.cursor = 'not-allowed';
+      deleteAgentBtn.title = "预设智能体不可删除";
+    } else {
+      deleteAgentBtn.disabled = false;
+      deleteAgentBtn.style.opacity = '1';
+      deleteAgentBtn.style.cursor = 'pointer';
+      deleteAgentBtn.title = "删除当前智能体";
+    }
   }
+  
+  // 监听选择变化以更新按钮状态
+  agentSelect.addEventListener('change', updateDeleteButtonState);
 
   // 显示智能体表单
-  container.querySelector('.add-btn')?.addEventListener('click', function() {
-    container.querySelector('#agentForm').style.display = 'block';
-    container.querySelector('#agentName').focus();
+  container.querySelector('[data-role="addAgentBtn"]')?.addEventListener('click', function(e) {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    container.querySelector('[data-role="agentForm"]').style.display = 'block';
+    container.querySelector('[data-role="agentName"]').focus();
   });
 
   // 取消智能体表单
-  container.querySelector('button[onclick="cancelAgentForm()"]')?.addEventListener('click', function() {
-    container.querySelector('#agentForm').style.display = 'none';
-    container.querySelector('#agentName').value = '';
-    container.querySelector('#agentPrompt').value = '';
+  container.querySelector('[data-role="cancelAgentBtn"]')?.addEventListener('click', function(e) {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    container.querySelector('[data-role="agentForm"]').style.display = 'none';
+    container.querySelector('[data-role="agentName"]').value = '';
+    container.querySelector('[data-role="agentPrompt"]').value = '';
   });
 
-  // 保存智能体
-  container.querySelector('button[onclick="saveAgent()"]')?.addEventListener('click', function() {
-    const name = container.querySelector('#agentName').value.trim();
-    const prompt = container.querySelector('#agentPrompt').value.trim();
+  // 保存智能体 (修改为上传到 Supabase)
+  container.querySelector('[data-role="saveAgentBtn"]')?.addEventListener('click', async function(e) {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    const name = container.querySelector('[data-role="agentName"]').value.trim();
+    const prompt = container.querySelector('[data-role="agentPrompt"]').value.trim();
+    const saveBtn = this;
 
     if (!name) return alert("请填写智能体名称");
     if (!prompt) return alert("请填写系统提示词");
-
-    const agents = loadAgents();
+    if (agentBusy) return;
 
     // 检查名称是否已经存在
-    if(agents.some(a => a.name === name)) {
+    if(allAgents.some(a => a.name === name)) {
       return alert("该名称已存在，请使用不同的名称");
     }
+    
+    const userId = getUserId();
+    if (!userId) return alert("请先登录");
 
-    agents.push({ name, prompt });
-    saveAgents(agents);
+    const client = getSupabaseClient();
+    if (!client) return alert("无法连接到服务器");
 
-    // 切换到新创建的智能体
-    agentSelect.value = agents.length - 1;
+    agentBusy = true;
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中...';
 
-    container.querySelector('#agentForm').style.display = 'none';
-    container.querySelector('#agentName').value = '';
-    container.querySelector('#agentPrompt').value = '';
+    try {
+      await safeSupabaseCall(async () => {
+        const { error } = await client
+          .from('prompt')
+          .insert([
+            { 
+              user_id: userId,
+              chara_name: name, 
+              prompt: prompt 
+            }
+          ]);
+          
+        if (error) throw error;
+        
+        await refreshAgents();
+        
+        if (allAgents.length) {
+          agentSelect.value = String(allAgents.length - 1);
+          updateDeleteButtonState();
+        }
+
+        container.querySelector('[data-role="agentForm"]').style.display = 'none';
+        container.querySelector('[data-role="agentName"]').value = '';
+        container.querySelector('[data-role="agentPrompt"]').value = '';
+      }, () => {
+        agentBusy = false;
+        saveBtn.disabled = false;
+        saveBtn.textContent = '保存';
+      });
+    } catch (err) {
+      alert("保存失败: " + err.message);
+    }
   });
+  
+  // 删除智能体事件
+  if (deleteAgentBtn) {
+    deleteAgentBtn.addEventListener('click', async function(e) {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      
+      const selectedIndex = Number(agentSelect.value);
+      const agent = allAgents[selectedIndex];
+      
+      if (!agent || !agent.id) {
+        alert('当前智能体状态异常，请刷新');
+        return;
+      }
+      if (agent.isPreset) return;
+      
+      if (agentBusy) return;
+      if (!confirm(`确定要删除智能体 "${agent.name}" 吗？`)) return;
+      
+      const btn = this;
+      const client = getSupabaseClient();
+      if (!client) return alert("无法连接到服务器");
+      
+      agentBusy = true;
+      btn.disabled = true;
+      const originalHtml = btn.innerHTML;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+      
+      try {
+        await safeSupabaseCall(async () => {
+          const { error } = await client
+            .from('prompt')
+            .delete()
+            .eq('id', agent.id);
+            
+          if (error) throw error;
+          
+          await refreshAgents();
+          if (allAgents.length) {
+            agentSelect.value = "0";
+            updateDeleteButtonState();
+          }
+        }, () => {
+          agentBusy = false;
+          btn.disabled = false;
+          btn.innerHTML = originalHtml;
+        });
+      } catch (err) {
+        alert("删除失败: " + err.message);
+      }
+    });
+  }
+  
+  // 刷新按钮事件
+  if (refreshAgentBtn) {
+    refreshAgentBtn.addEventListener('click', function(e) {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      refreshAgents();
+    });
+  }
 
   // 清除聊天记录
-  container.querySelector('#clearBtn')?.addEventListener('click', function() {
+  container.querySelector('[data-role="clearBtn"]')?.addEventListener('click', function(e) {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     chat.innerHTML = '';
   });
 
@@ -1461,7 +1748,10 @@ function initCustomAgentScripts(container) {
   }
 
   // 消息气泡样式增强
-  function appendMessage(sender, text) {
+  function appendMessage(sender, text, targetContainer = null) {
+    const container = targetContainer || chat;
+    if (!container) return;
+    
     const msgDiv = document.createElement('div');
     msgDiv.classList.add('message');
     msgDiv.classList.add(sender === 'user' ? 'user' : 'bot');
@@ -1481,7 +1771,12 @@ function initCustomAgentScripts(container) {
     headerDiv.classList.add('message-header');
 
     const agents = loadAgents();
-    const agentName = agents.length > 0 && sender !== 'user' ? agents[agentSelect.value].name : '你';
+    let agentName = '你';
+    if (sender !== 'user' && agents.length > 0) {
+      const idx = Number(agentSelect.value);
+      const agentSafe = agents[idx] || agents[0];
+      agentName = agentSafe && agentSafe.name ? agentSafe.name : 'AI';
+    }
     headerDiv.innerHTML = `<span>${agentName}</span><span>${getCurrentTime()}</span>`;
     contentDiv.appendChild(headerDiv);
 
@@ -1492,8 +1787,8 @@ function initCustomAgentScripts(container) {
     contentDiv.appendChild(textDiv);
 
     msgDiv.appendChild(contentDiv);
-    chat.appendChild(msgDiv);
-    chat.scrollTop = chat.scrollHeight;
+    container.appendChild(msgDiv);
+    container.scrollTop = container.scrollHeight;
   }
 
   // 显示正在输入状态
@@ -1530,14 +1825,15 @@ function initCustomAgentScripts(container) {
 
     if (agents.length === 0) {
       alert("请先创建一个智能体");
-      container.querySelector('#agentForm').style.display = 'block';
-      container.querySelector('#agentName').focus();
+      container.querySelector('[data-role="agentForm"]').style.display = 'block';
+      container.querySelector('[data-role="agentName"]').focus();
       return;
     }
 
     if (!text) return;
 
-    const selectedAgent = agents[agentSelect.value];
+    const idx = Number(agentSelect.value);
+    const selectedAgent = agents[idx] || agents[0];
 
     appendMessage('user', text);
     input.value = '';
@@ -1575,6 +1871,9 @@ function initCustomAgentScripts(container) {
       hideTypingIndicator();
       appendMessage('bot', reply);
 
+      // 保存对话记录到后端
+      await saveCustomAgentChatRecord(text, reply, container);
+
     } catch (error) {
       hideTypingIndicator();
       appendMessage('bot', `错误: ${error.message}`);
@@ -1589,42 +1888,300 @@ function initCustomAgentScripts(container) {
   }
 
   // 添加事件监听器
-  sendBtn.addEventListener('click', sendMessage);
-  input.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  });
-
-  // 初始化示例智能体
-  function initSampleAgents() {
-    const agents = loadAgents();
-
-    if(agents.length === 0) {
-      const sampleAgents = [
-        {
-          name: "技术助手",
-          prompt: "你是一个专业的编程助手，精通多种编程语言，能够帮助用户解决各类技术问题。"
-        },
-        {
-          name: "创意写作伙伴",
-          prompt: "你是一位创意作家，擅长写小说、诗歌和剧本，帮助用户克服创作障碍并激发创意。"
-        }
-      ];
-
-      localStorage.setItem('agents', JSON.stringify(sampleAgents));
-    }
+  if (sendBtn) {
+    sendBtn.addEventListener('click', sendMessage);
+  }
+  if (input) {
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
   }
 
   // 初始化应用
-  initSampleAgents();
-  renderAgentOptions();
+  refreshAgents();
 
   // 添加示例对话
   setTimeout(() => {
     appendMessage('bot', '您好！我是您的AI助手，欢迎使用智能体对话系统。请从上方选择或创建您想要的智能体类型开始对话。');
   }, 500);
+  
+  // 初始化历史记录相关事件
+  initCustomAgentHistoryEvents(container);
+}
+
+// 显示单条对话的函数，支持指定聊天容器
+function showSingleConversation(record, chatContainer = null) {
+  // 如果没有指定容器，尝试从当前上下文获取
+  const container = chatContainer || 
+                    (document.getElementById('app') ? document.querySelector('[data-role="chat"]') : null) || 
+                    document.getElementById('chat'); 
+  
+  if (!container || !record) return; 
+  
+  container.innerHTML = ''; 
+  
+  const userRole = normalizeRole(record.user_role, 'user');
+  const assistantRole = normalizeRole(record.assistant_role, 'bot');
+  
+  // 确保消息存在再渲染
+  if (record.user_message) {
+    appendMessage(userRole, record.user_message, container); 
+  } 
+  
+  // 延迟渲染助手消息
+  if (record.assistant_message) {
+    setTimeout(() => {
+      appendMessage(assistantRole, record.assistant_message, container); 
+    }, 100);
+  } 
+  
+  if (!chatContainer || chatContainer === window.chatElements?.chat || chatContainer.id === 'chat') {
+    window.chatState.contextHistory = [
+      { role: "system", content: "你是一个乐于助人的AI助手，使用中文回答用户问题" },
+      { role: "user", content: record.user_message || "" },
+      { role: "assistant", content: record.assistant_message || "" }
+    ];
+  }
+}
+
+// 保存自定义智能体聊天记录
+async function saveCustomAgentChatRecord(userMsg, botMsg, container = null) {
+  try {
+    const client = getSupabaseClient();
+    if (!client) {
+      console.error('saveCustomAgentChatRecord: 没有可用 Supabase 客户端');
+      return { error: 'no_client' };
+    }
+
+    // 尝试获取 userId (使用缓存)
+    const userId = await getUserId();
+
+    if (!userId) {
+      console.warn('saveCustomAgentChatRecord: 未检测到 userId（用户可能未登录）');
+      return { error: 'no_user' };
+    }
+
+    const payload = {
+      user_id: userId,
+      user_message: userMsg ?? '',
+      assistant_message: botMsg ?? ''
+    };
+
+    const res = await client.from('conversations_add').insert([payload]).select();
+    if (res?.error) {
+      console.error('saveCustomAgentChatRecord: 插入失败', res.error);
+      return { error: res.error };
+    }
+
+    console.log('saveCustomAgentChatRecord: 插入成功', res.data);
+    if (typeof loadCustomAgentHistoryToSidebar === 'function') {
+      try { loadCustomAgentHistoryToSidebar('', container); } catch(e){ console.warn('刷新历史失败', e); }
+    }
+    return { data: res.data };
+  } catch (err) {
+    console.error('saveCustomAgentChatRecord 捕获异常', err);
+    return { error: err };
+  }
+}
+
+// 导出自定义智能体历史记录为CSV
+async function exportCustomAgentHistoryToCSV() {
+  try {
+    const client = getSupabaseClient();
+    if (!client) {
+      alert("Supabase未初始化，无法导出历史记录");
+      return;
+    }
+
+    // 获取用户信息 (使用缓存)
+    const userId = await getUserId();
+    
+    if (!userId) {
+      alert('请先登录');
+      return;
+    }
+
+    // 查询自定义智能体的聊天记录
+    const { data: records, error } = await client
+      .from('conversations_add')
+      .select('created_at, user_message, assistant_message')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    if (!records || records.length === 0) {
+      alert('没有自定义智能体的历史记录可导出');
+      return;
+    }
+
+    // 构造CSV内容
+    let csvContent = '时间,用户消息,智能体回复\n';
+    records.forEach(record => {
+      const time = record.created_at ? new Date(record.created_at).toLocaleString() : '';
+      // 处理CSV中的引号转义
+      const userMsg = record.user_message ? `"${record.user_message.replace(/"/g, '""')}"` : '';
+      const assistantMsg = record.assistant_message ? `"${record.assistant_message.replace(/"/g, '""')}"` : '';
+      csvContent += `${time},${userMsg},${assistantMsg}\n`;
+    });
+
+    // 创建下载链接
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `自定义智能体聊天记录_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url); // 释放资源
+          
+  } catch (error) {
+    console.error('导出自定义智能体历史记录失败:', error);
+    alert('导出失败: ' + error.message);
+  }
+}
+
+// 初始化自定义智能体历史记录事件
+function initCustomAgentHistoryEvents(container) {
+  // 搜索历史记录
+  const searchInput = container.querySelector('[data-role="searchInputSidebar"]');
+  if (searchInput) {
+    // 先移除可能存在的事件监听器，避免重复绑定
+    searchInput.removeEventListener('input', handleSearchInput);
+    
+    function handleSearchInput(e) {
+      loadCustomAgentHistoryToSidebar(e.target.value, container);
+    }
+    
+    searchInput.addEventListener('input', handleSearchInput);
+  }
+  
+  // 刷新历史记录
+  const refreshBtn = container.querySelector('[data-role="refreshHistoryBtnSidebar"]');
+  if (refreshBtn) {
+    refreshBtn.removeEventListener('click', handleRefresh);
+    
+    function handleRefresh() {
+      loadCustomAgentHistoryToSidebar('', container);
+    }
+    
+    refreshBtn.addEventListener('click', handleRefresh);
+  }
+  
+  // 导出历史记录
+  const exportBtn = container.querySelector('[data-role="exportHistoryBtn"]');
+  if (exportBtn) {
+    exportBtn.removeEventListener('click', handleExport);
+    
+    function handleExport() {
+      exportCustomAgentHistoryToCSV();
+    }
+    
+    exportBtn.addEventListener('click', handleExport);
+  }
+  
+  // 初始加载历史记录
+  loadCustomAgentHistoryToSidebar('', container);
+}
+
+// 加载自定义智能体历史记录到侧边栏
+async function loadCustomAgentHistoryToSidebar(keyword = '', container = null) {
+  try {
+    const historyList = container ? container.querySelector('[data-role="historyListSidebar"]') : document.getElementById('historyListSidebar');
+    if (!historyList) return;
+    
+    // 如果是首次加载（不是搜索），显示加载中
+    if (!keyword && historyList.children.length === 0) {
+      historyList.innerHTML = '<div class="loading">加载中...</div>';
+    }
+
+    const client = getSupabaseClient();
+    if (!client) {
+      historyList.innerHTML = '<div style="padding:15px;color:#666;">请先登录以查看历史记录</div>';
+      return;
+    }
+
+    // 获取用户 id (使用缓存)
+    const userId = await getUserId();
+    
+    if (!userId) {
+      historyList.innerHTML = '<div style="padding:15px;color:#666;">请先登录以查看历史记录</div>';
+      return;
+    }
+
+    const makeQuery = () => {
+      let query = client
+        .from('conversations_add')
+        .select('id, created_at, user_message, assistant_message')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .range(0, 49);
+
+      if (keyword) {
+        query = query.or(`user_message.ilike.%${keyword}%,assistant_message.ilike.%${keyword}%`);
+      }
+
+      return query;
+    };
+
+    const { data: records, error } = await runQueryWithRetry(
+      makeQuery,
+      15000,
+      'Load custom agent history timeout'
+    );
+
+    if (error) {
+      console.error('获取自定义智能体历史失败', error);
+      historyList.innerHTML = '<div style="padding:15px;color:#666;">获取历史记录失败</div>';
+      return;
+    }
+
+    if (!records || records.length === 0) {
+      historyList.innerHTML = '<div style="padding:15px;color:#666;">暂无历史记录</div>';
+      return;
+    }
+
+    // 清空列表
+    historyList.innerHTML = '';
+
+    // 构建历史记录项
+    records.forEach(record => {
+      const date = new Date(record.created_at);
+      const formattedDate = `${date.getFullYear()}年${date.getMonth()+1}月${date.getDate()}日`;
+      const formattedTime = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+      
+      const userPreview = record.user_message 
+        ? (record.user_message.length > 60 ? record.user_message.substring(0, 60) + '...' : record.user_message) 
+        : '无用户消息';
+      
+      const recordItem = document.createElement('div');
+      recordItem.className = 'history-item';
+      
+      recordItem.innerHTML = `
+        <div class="search-header">
+          自定义智能体 <span>${formattedDate} ${formattedTime}</span>
+        </div>
+        <div class="record-preview user-msg">${userPreview}</div>
+      `;
+      
+      // 点击记录项查看完整对话
+      recordItem.addEventListener('click', () => {
+        // 获取当前聊天容器
+        const chat = container ? container.querySelector('[data-role="chat"]') : null;
+        if (chat) {
+          showSingleConversation(record, chat);
+        }
+      });
+      
+      historyList.appendChild(recordItem);
+    });
+  } catch (err) {
+    console.error('loadCustomAgentHistoryToSidebar 捕获异常', err);
+  }
 }
 
 // 向量计算核心
@@ -1731,6 +2288,36 @@ window.initChatEvents = initChatEvents;
 window.removeChatEvents = removeChatEvents;
 window.initVoiceRecognition = initVoiceRecognition;
 window.resetContext = resetContext;
+
+let lastCustomAgentErrorTs = 0;
+function shouldHandleCustomAgentErrorEvent(e) {
+  if (!document.getElementById('customAgentBackdrop')) return false;
+  const filename = (e && typeof e.filename === 'string') ? e.filename : '';
+  if (filename.startsWith('chrome-extension://')) return false;
+  if (filename && /^https?:\/\//.test(filename) && !filename.startsWith(window.location.origin)) return false;
+  return true;
+}
+function maybeNotifyCustomAgentError(e, tag) {
+  const now = Date.now();
+  if (now - lastCustomAgentErrorTs < 3000) return;
+  lastCustomAgentErrorTs = now;
+  try {
+    console.error(tag, e?.error || e?.reason || e?.message || e);
+  } catch (_) {}
+  try {
+    alert('智能体模块发生错误，请关闭后重试');
+  } catch (_) {}
+}
+window.addEventListener('error', function(e) {
+  if (!shouldHandleCustomAgentErrorEvent(e)) return;
+  maybeNotifyCustomAgentError(e, 'CustomAgent Error:');
+});
+window.addEventListener('unhandledrejection', function(e) {
+  if (!document.getElementById('customAgentBackdrop')) return;
+  const reasonStr = String(e?.reason?.message || e?.reason || '');
+  if (reasonStr.includes('chrome-extension://')) return;
+  maybeNotifyCustomAgentError(e, 'CustomAgent UnhandledRejection:');
+});
 window.addResetButton = addResetButton;
 
 // 动态渲染历史记录
@@ -1904,6 +2491,16 @@ function initHistorySidebar() {
   if (exportHistoryBtn) {
     exportHistoryBtn.addEventListener('click', exportHistoryToCSV);
   }
+  
+  const client = getSupabaseClient();
+  if (client && client.auth && typeof client.auth.onAuthStateChange === 'function') {
+    // initAuthState 已经统一处理了状态变化，这里只需在登录状态变化时重载历史
+    client.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+        loadHistoryToSidebar();
+      }
+    });
+  }
 }
 
 // 加载历史记录到侧边栏
@@ -1911,22 +2508,32 @@ async function loadHistoryToSidebar(keyword = '') {
   const historyList = document.getElementById('historyListSidebar');
   if (!historyList) return;
   
-  historyList.innerHTML = '<div class="loading">加载中...</div>';
+  // 首次加载显示 loading
+  if (!keyword && historyList.children.length === 0) {
+    historyList.innerHTML = '<div class="loading">加载中...</div>';
+  }
   
   try {
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError || !userData?.user) {
+    const client = getSupabaseClient();
+    if (!client) {
+      historyList.innerHTML = '<div class="history-item empty">正在初始化，请稍后</div>';
+      return;
+    }
+    
+    // 使用缓存的 UserId
+    const userId = getUserId();
+    if (!userId) {
       historyList.innerHTML = '<div class="history-item empty">请先登录查看历史记录</div>';
       return;
     }
     
-    const user = userData.user;
-    
-    const { data: records, error } = await supabase
-      .from('conversations')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+    const { data: records, error } = await client
+        .from('conversations')
+        .select('id, created_at, user_message, assistant_message')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .range(0, 49)
+        .or(keyword ? `user_message.ilike.%${keyword}%,assistant_message.ilike.%${keyword}%` : 'id.neq.0'); // 简单处理关键词逻辑
     
     if (error) {
       console.error('获取历史记录失败:', error);
@@ -1939,117 +2546,82 @@ async function loadHistoryToSidebar(keyword = '') {
       return;
     }
     
-    // 修复1：使用正确的过滤和分组逻辑
-    let filteredRecords = records;
-    if (keyword) {
-      const lowerKeyword = keyword.toLowerCase();
-      // 修改过滤逻辑，移除强制角色校验
-      filteredRecords = records.filter(record => {
-        // 统一处理空消息的情况
-        const matchesKeyword = (
-          (record.user_message || '').toLowerCase().includes(lowerKeyword) ||
-          (record.assistant_message || '').toLowerCase().includes(lowerKeyword)
-        );
-        return matchesKeyword; // 只需要关键词匹配
-      });
-    }
-    
-    if (filteredRecords.length === 0) {
-      historyList.innerHTML = '<div class="history-item empty">未找到匹配的记录</div>';
-      return;
-    }
-    
-    // 修复2：清空列表
+    // 渲染逻辑
     historyList.innerHTML = '';
     
-    // 修复3：简化搜索结果显示逻辑
     if (keyword) {
-      // 搜索模式：直接显示匹配项
+      // 搜索模式
       const searchHeader = document.createElement('div');
       searchHeader.className = 'search-header';
-      searchHeader.innerHTML = `<i class="fas fa-search"></i> 搜索结果 (${filteredRecords.length}条)`;
+      searchHeader.innerHTML = `<i class="fas fa-search"></i> 搜索结果 (${records.length}条)`;
       historyList.appendChild(searchHeader);
       
-      filteredRecords.forEach(record => {
+      records.forEach(record => {
         const recordItem = document.createElement('div');
         recordItem.className = 'search-record-item';
         
-        // 格式化日期时间
         const date = new Date(record.created_at);
         const formattedDate = `${date.getFullYear()}年${date.getMonth()+1}月${date.getDate()}日`;
         const formattedTime = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')}`;
         
-        // 高亮关键词的函数
+        // 高亮关键词
         const highlightKeywords = (text) => {
           if (!text || !keyword) return text;
           const regex = new RegExp(keyword, 'gi');
-          return text.replace(regex, match =>
-            `<span class="highlight">${match}</span>`
-          );
+          return text.replace(regex, match => `<span class="highlight">${match}</span>`);
         };
         
-        // 构建完整对话内容
         const userMsg = record.user_message ?
           `<div class="conversation-line"><strong>用户：</strong>${highlightKeywords(record.user_message)}</div>` : '';
           
         const assistantMsg = record.assistant_message ?
           `<div class="conversation-line"><strong>助理：</strong>${highlightKeywords(record.assistant_message)}</div>` : '';
         
-        // 添加角色标识到DOM元素
-        recordItem.dataset.userRole = record.user_role || 'user'; // 用户消息
-        recordItem.dataset.botRole = record.assistant_role || 'bot'; // 机器人消息
-        
         recordItem.innerHTML = `
           <div class="conversation-block">
-            <div class="roles-indicator" style="display:none;">
-              用户角色: ${record.user_role || 'user'}, 助理角色: ${record.assistant_role || 'bot'}
-            </div>
             ${userMsg}
             ${assistantMsg}
-            <div class="conversation-time">
-              ${formattedDate} ${formattedTime}
-            </div>
+            <div class="conversation-time">${formattedDate} ${formattedTime}</div>
           </div>
         `;
         
-        // 修改点击事件处理
         recordItem.addEventListener('click', function(e) {
           e.stopPropagation();
-          // 传递完整记录
-          showSingleConversation(record);
+          // 显示单条记录逻辑... 这里主界面可能需要不同的显示逻辑
+          // 暂时复用 showSingleConversation 或者直接替换主聊天区
+           const chatContainer = window.chatElements.chat;
+           if (chatContainer) {
+             chatContainer.innerHTML = '';
+             if (record.user_message) appendMessage('user', record.user_message);
+             if (record.assistant_message) appendMessage('bot', record.assistant_message);
+           }
         });
         
         historyList.appendChild(recordItem);
       });
     } else {
-      // 修复1：使用本地日期格式处理
+      // 日期分组模式
       const groupedByDate = {};
-      filteredRecords.forEach(record => {
-        // 使用本地日期作为分组键
+      records.forEach(record => {
         const dateObj = new Date(record.created_at);
         const localYear = dateObj.getFullYear();
         const localMonth = (dateObj.getMonth() + 1).toString().padStart(2, '0');
         const localDate = dateObj.getDate().toString().padStart(2, '0');
-        const dateKey = `${localYear}-${localMonth}-${localDate}`; // 本地日期作为分组键
+        const dateKey = `${localYear}-${localMonth}-${localDate}`;
         
-        if (!groupedByDate[dateKey]) {
-          groupedByDate[dateKey] = [];
-        }
+        if (!groupedByDate[dateKey]) groupedByDate[dateKey] = [];
         groupedByDate[dateKey].push(record);
       });
       
-      // 修复2：正确创建分组项
       Object.keys(groupedByDate).forEach(dateKey => {
         const dateGroup = groupedByDate[dateKey];
         const dateItem = document.createElement('div');
         dateItem.className = 'history-date-item';
         dateItem.dataset.date = dateKey;
         
-        // 日期显示逻辑保持不变，因为dateKey现在已经是本地日期
         const dateParts = dateKey.split('-');
         const formattedDate = `${dateParts[0]}年${parseInt(dateParts[1])}月${parseInt(dateParts[2])}日`;
         
-        // 获取第一条消息作为摘要
         const firstMessage = dateGroup[0].user_message?.substring(0, 40) || 
                              dateGroup[0].assistant_message?.substring(0, 40) || 
                              '无消息内容';
@@ -2063,12 +2635,12 @@ async function loadHistoryToSidebar(keyword = '') {
           <div class="date-summary">${displayMessage}</div>
         `;
         
-        // 修复3：确保点击事件绑定正确
         dateItem.addEventListener('click', function(e) {
           e.stopPropagation();
-          document.querySelectorAll('.history-date-item').forEach(i => 
-            i.classList.remove('selected'));
+          document.querySelectorAll('.history-date-item').forEach(i => i.classList.remove('selected'));
           this.classList.add('selected');
+          // 这里可以加载当天的详细记录，或者直接显示这50条里的
+          // 为了简单，我们只加载当天的
           loadDailyHistory(dateKey);
         });
         
@@ -2089,29 +2661,29 @@ async function loadDailyHistory(dateKey) {
   chatBox.innerHTML = '<div class="loading">加载中...</div>';
   
   try {
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError || !userData || !userData.user) {
+    const client = getSupabaseClient();
+    if (!client || !client.auth) {
+      chatBox.innerHTML = '<div class="message bot"><div class="message-content">正在初始化，请稍后</div></div>';
+      setTimeout(() => loadDailyHistory(dateKey), 800);
+      return;
+    }
+    const userId = getUserId();
+    if (!userId) {
       chatBox.innerHTML = '<div class="message bot"><div class="message-content">请先登录查看历史记录</div></div>';
       return;
     }
-    
-    const user = userData.user;
+
     // 直接用本地时间范围查
     const startLocal = new Date(dateKey + 'T00:00:00'); // 本地 0 点
     const endLocal = new Date(startLocal.getTime() + 24 * 60 * 60 * 1000);
-    
-    const { data: records, error } = await supabase
-      .from('conversations')
-      .select(`
-        id, 
-        created_at, 
-        user_message, 
-        assistant_message
-      `)
-      .eq('user_id', user.id)
-      .gte('created_at', startLocal.toISOString()) // 用本地的 ISO
-      .lt('created_at', endLocal.toISOString())
-      .order('created_at', { ascending: true });
+
+    const { data: records, error } = await client
+        .from('conversations')
+        .select('id, created_at, user_message, assistant_message')
+        .eq('user_id', userId)
+        .gte('created_at', startLocal.toISOString())
+        .lt('created_at', endLocal.toISOString())
+        .order('created_at', { ascending: true });
     
     if (error) {
       console.error('获取历史记录失败:', error);
@@ -2135,12 +2707,12 @@ async function loadDailyHistory(dateKey) {
     async function loadRecordsSequentially(records) {
       for (const record of records) {
         if (record.user_message) {
-          appendMessage(record.user_role || 'user', record.user_message);
+          appendMessage(normalizeRole(record.user_role, 'user'), record.user_message);
           await new Promise(resolve => setTimeout(resolve, 300));
         }
         
         if (record.assistant_message) {
-          appendMessage(record.assistant_role || 'bot', record.assistant_message);
+          appendMessage(normalizeRole(record.assistant_role, 'bot'), record.assistant_message);
           await new Promise(resolve => setTimeout(resolve, 500));
         }
       }
@@ -2154,37 +2726,31 @@ async function loadDailyHistory(dateKey) {
 }
 
 // 显示单条对话 
-function showSingleConversation(record) { 
-  const chatBox = document.getElementById('chat'); 
-  if (!chatBox || !record) return; // 增加参数校验 
+function showSingleConversation(record, chatContainer = null) { 
+  const chatBox = chatContainer || document.getElementById('chat'); 
+  if (!chatBox || !record) return; 
   
   chatBox.innerHTML = ''; 
   
-  // 严格校验角色信息，避免异常值 
-  const validRoles = ['user', 'bot', 'system']; 
-  const userRole = validRoles.includes(record.user_role) ? record.user_role : 'user'; 
-  const assistantRole = validRoles.includes(record.assistant_role) ? record.assistant_role : 'bot'; 
+  const userRole = normalizeRole(record.user_role, 'user'); 
+  const assistantRole = normalizeRole(record.assistant_role, 'bot'); 
   
-  // 增加日志便于调试 
   console.log('渲染对话角色:', { 
     userRole, 
     assistantRole, 
     recordId: record.id 
   }); 
   
-  // 确保消息存在再渲染，避免空消息导致的角色混淆 
   if (record.user_message) { 
-    appendMessage(userRole, record.user_message); 
+    appendMessage(userRole, record.user_message, chatBox); 
   }
   
-  // 延迟渲染助手消息，避免DOM渲染顺序问题 
   if (record.assistant_message) { 
     setTimeout(() => { 
-      appendMessage(assistantRole, record.assistant_message); 
+      appendMessage(assistantRole, record.assistant_message, chatBox); 
     }, 100); 
   }
   
-  // 同步更新上下文历史，确保角色一致性 
   window.chatState.contextHistory = [ 
     { role: "system", content: "你是一个乐于助人的AI助手，使用中文回答用户问题" }, 
     { role: userRole, content: record.user_message || "" }, 
@@ -2224,13 +2790,24 @@ window.updateChatAvatar = function(newAvatarUrl ) {
 // 将 updateUserAvatarFromDB 函数添加到全局 window 对象
 window.updateUserAvatarFromDB = updateUserAvatarFromDB;
 
-// 重置聊天状态
+// 重置聊天状态 - 不触发思考动画
 function resetChatState() {
   const chatBox = document.getElementById('chat');
   if (!chatBox) return;
   
   chatBox.innerHTML = '';
-  appendMessage('bot', '您好！请问有什么可以帮助您的吗？您可以具体一点吗？比如："TT"是什么意思？"*"需要帮助解决某个问题？"，还是随便打个招呼？随时告诉我，我会尽力帮你！');
+  
+  // 直接创建欢迎消息元素，不使用appendMessage以避免触发思考动画
+  const messageDiv = document.createElement('div');
+  messageDiv.className = 'message bot';
+  messageDiv.innerHTML = `
+    <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAlWVYSWZNTQAqAAAACAAEAQAAAwAAAAEFJwAAAQEAAwAAAAEElgAAh2kABAAAAAEAAAA+ARIAAwAAAAEAAQAAAAAAAAACkoYAAgAAAA8AAABckggABAAAAAEAAAAAAAAAAE9wbHVzXzE2OTA4Mjg4AAADvElEQVRYCe2XS2sTQRSGHyUhohJBghBpUuLIHtghgUpkNSQPqg6NRNw6cOHCxWfgQrVShfQX/Ai/gQIv4UWrZWs2Kixv01T9qjKoa9n5vL1l3dn95X8nNvrxkLzUIIYQQQvhxq3wLwAwgVdyusx9UBvSDVhWQTlQFKvejlWf8iCeMOypJdFh9cz1kHckm/wWFdn1DE9FcISiqDKcBNRRGdrho3hV1l7GVbNMYJcFiabPSl4G45t45thTLVf6B6B3wGgA4At1utw4bWIhj/0Vq1F7nqwADtDdoFxFzjcU26KDM4z3cNqNd30A5GLP5m6wF6JY5t6RZFlKItAF1hDQqCqUEZEvU4oJcHkF4zQQaL2tsWe8pPeYdMkqKhq6Z2kVJggdBUnVaQbUN4CzoYOg5nd7T7gC8gA3W2u4U6YMrJbHz5SKvhBqVmbEoMZgO9gnzCzRrLBGa8ALXIpn9C9nyJElPlH6uIfrwPsGtlk7YcwCDM/vJwSuWx11jt3RYA91iDqpv+TK5xzOBo64y49k2jQMe07A3HZjFbZ4A+msTKLgRRoYtkixM2VbBiXJSZ3FsAamNImf1gFZ9TIKAZ3KzOIoF6mjAqlUlgqUnbMuTFeuAa7sGlIYZlI3NcdjAqPQWYZFhxSDgCMXGIrj6dgC5KXGFpQkhxKHYSKx4rRkOcFjbQx8RIaTfH6DFIF9XAkxV2V/wB6hBnylUwwYBvmBPo2FxepuM5noEOGaX5R2U7gLNeG8Ox05sIfQ93yPgei8gwDNb+0AtXyq9kgTA2Zd6VGHYIRvAKTEm4uUypT7gTuyNGRDo3yY26Y9Z4WqK+wGS8WkMr7qdifJ9bQPSiE+tUAl5TgqbH/wYmvHoEYXBA1pbgqf3UGa3n1ja6Xnfnok0W3yeiW6OvmKy3OqXjPgvnNkR+FPKfKwbxSWvwAAAABJRU5ErkJggg==" alt="机器人头像" class="avatar">
+    <div class="message-content">
+      您好！请问有什么可以帮助您的吗？
+    </div>
+  `;
+  
+  chatBox.appendChild(messageDiv);
   
   document.querySelectorAll('.history-date-item').forEach(item => {
     item.classList.remove('selected');
@@ -2272,3 +2849,67 @@ document.addEventListener('DOMContentLoaded', function() {
     initBackToChatButton();
   }
 });
+
+// 清理自定义智能体模态框的函数
+function cleanupCustomAgent(container) {
+  console.log('清理自定义智能体资源');
+  
+  // 移除所有事件监听器
+  const sendBtn = container.querySelector('[data-role="sendBtn"]');
+  const input = container.querySelector('[data-role="input"]');
+  const backBtn = container.querySelector('[data-role="backBtn"]');
+  const searchInput = container.querySelector('[data-role="searchInputSidebar"]');
+  const refreshBtn = container.querySelector('[data-role="refreshHistoryBtnSidebar"]');
+  const exportBtn = container.querySelector('[data-role="exportHistoryBtn"]');
+  
+  if (sendBtn) {
+    const newSendBtn = sendBtn.cloneNode(true);
+    sendBtn.parentNode.replaceChild(newSendBtn, sendBtn);
+  }
+  
+  if (input) {
+    const newInput = input.cloneNode(true);
+    input.parentNode.replaceChild(newInput, input);
+  }
+  
+  if (backBtn) {
+    const newBackBtn = backBtn.cloneNode(true);
+    backBtn.parentNode.replaceChild(newBackBtn, backBtn);
+  }
+  
+  if (searchInput) {
+    const newSearchInput = searchInput.cloneNode(true);
+    searchInput.parentNode.replaceChild(newSearchInput, searchInput);
+  }
+  
+  if (refreshBtn) {
+    const newRefreshBtn = refreshBtn.cloneNode(true);
+    refreshBtn.parentNode.replaceChild(newRefreshBtn, refreshBtn);
+  }
+  
+  if (exportBtn) {
+    const newExportBtn = exportBtn.cloneNode(true);
+    exportBtn.parentNode.replaceChild(newExportBtn, exportBtn);
+  }
+  
+  // 清除所有定时器
+  const typingIndicator = container.querySelector('#typingIndicator');
+  if (typingIndicator) {
+    typingIndicator.remove();
+  }
+  
+  // 停止语音播报（如果正在播放）
+  if (window.speechSynthesis && window.speechSynthesis.speaking) {
+    window.speechSynthesis.cancel();
+  }
+  
+  if (Array.isArray(window.chatState.previousContextHistory)) {
+    window.chatState.contextHistory = window.chatState.previousContextHistory.map(item => ({ ...item }));
+    window.chatState.previousContextHistory = null;
+  }
+
+  // 清除本地存储的临时数据
+  localStorage.removeItem('agents');
+  
+  console.log('自定义智能体清理完成');
+}

@@ -300,7 +300,12 @@ async function handleLogin() {
     }
     
     // 获取用户信息
-    const { user } = data;
+    const { user, session } = data;
+    
+    // 保存session到localStorage
+    if (session) {
+      localStorage.setItem("supabase_session", JSON.stringify(session));
+    }
     
     // 设置当前用户
     currentUserAccount = account;
