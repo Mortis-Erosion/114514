@@ -18,6 +18,37 @@ async function safeSupabaseCall(fn, unlockUI) {
   }
 }
 
+/**
+ * 带有超时和重试机制的查询包装器
+ * @param {Function} queryFn 返回 Supabase 查询对象的函数
+ * @param {number} timeout 超时时间(ms)
+ * @param {string} errorTag 错误标签
+ * @returns {Promise<{data: any, error: any}>}
+ */
+async function runQueryWithRetry(queryFn, timeout = 10000, errorTag = 'Query') {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  
+  try {
+    const query = queryFn();
+    // 如果查询对象支持 abort，则传入 signal
+    if (query.abortSignal) {
+        query.abortSignal(controller.signal);
+    }
+    
+    const result = await query;
+    clearTimeout(id);
+    return result;
+  } catch (err) {
+    clearTimeout(id);
+    if (err.name === 'AbortError') {
+      return { data: null, error: { message: `${errorTag}: Request timed out after ${timeout}ms` } };
+    }
+    return { data: null, error: err };
+  }
+}
+window.runQueryWithRetry = runQueryWithRetry;
+
 // 获取用户ID（仅从缓存获取）
 function getUserId() {
   return cachedUserId;
@@ -2476,7 +2507,6 @@ async function exportHistoryToCSV() {
 // 初始化历史记录侧边栏
 function initHistorySidebar() {
   document.getElementById('historyBtn').style.display = 'none';
-  loadHistoryToSidebar();
   
   document.getElementById('searchInputSidebar').addEventListener('input', function(e) {
     loadHistoryToSidebar(e.target.value);
@@ -2494,17 +2524,24 @@ function initHistorySidebar() {
   
   const client = getSupabaseClient();
   if (client && client.auth && typeof client.auth.onAuthStateChange === 'function') {
-    // initAuthState 已经统一处理了状态变化，这里只需在登录状态变化时重载历史
-    client.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
-        loadHistoryToSidebar();
+    // 彻底修复 Auth 初始化顺序：仅在用户确定登录后加载历史
+    client.auth.onAuthStateChange((event, session) => {
+      console.log("History Sidebar Auth Event:", event);
+      if (event === 'SIGNED_IN' && session?.user) {
+        // 显式更新缓存并加载历史
+        cachedUserId = session.user.id;
+        loadHistoryToSidebar('', session.user.id);
+      } else if (event === 'SIGNED_OUT') {
+        cachedUserId = null;
+        const historyList = document.getElementById('historyListSidebar');
+        if (historyList) historyList.innerHTML = '<div class="history-item empty">请先登录查看历史记录</div>';
       }
     });
   }
 }
 
 // 加载历史记录到侧边栏
-async function loadHistoryToSidebar(keyword = '') {
+async function loadHistoryToSidebar(keyword = '', explicitUserId = null) {
   const historyList = document.getElementById('historyListSidebar');
   if (!historyList) return;
   
@@ -2520,26 +2557,25 @@ async function loadHistoryToSidebar(keyword = '') {
       return;
     }
     
-    // 使用缓存的 UserId
-    const userId = getUserId();
+    // 优先使用传入的 UserId，否则使用缓存的
+    const userId = explicitUserId || getUserId();
     if (!userId) {
       historyList.innerHTML = '<div class="history-item empty">请先登录查看历史记录</div>';
       return;
     }
     
-    const { data: records, error } = await client
+    let query = client
         .from('conversations')
         .select('id, created_at, user_message, assistant_message')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
-        .range(0, 49)
-        .or(keyword ? `user_message.ilike.%${keyword}%,assistant_message.ilike.%${keyword}%` : 'id.neq.0'); // 简单处理关键词逻辑
-    
-    if (error) {
-      console.error('获取历史记录失败:', error);
-      historyList.innerHTML = '<div class="history-item empty">获取历史记录失败</div>';
-      return;
+        .limit(50);
+
+    if (keyword) {
+        query = query.or(`user_message.ilike.%${keyword}%,assistant_message.ilike.%${keyword}%`);
     }
+    
+    const { data: records, error } = await query;
     
     if (!records || records.length === 0) {
       historyList.innerHTML = '<div class="history-item empty">暂无历史记录</div>';

@@ -303,7 +303,13 @@
     function initSupabase() {
       if (typeof supabase !== 'undefined' && typeof supabase.createClient === 'function') {
         // 全局定义supabase对象
-        window.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        window.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+          auth: {
+            persistSession: true,
+            autoRefreshToken: true,
+            detectSessionInUrl: true
+          }
+        });
         console.log('Supabase client initialized successfully');
       } else {
         console.error('Supabase library not loaded correctly or createClient method not available');
