@@ -425,14 +425,12 @@ window.CHAT_CONFIG = {
   BOT_AVATAR: "https://i.ibb.co/sdFXFR26/favicon-2.jpg",
   API_KEY: "sk-22c0d14edbc44bb387114294798dfb63",
   API_URL: "https://api.deepseek.com/v1/chat/completions",
-  // 添加火山引擎API配置
   VOLC_API_KEY: "39c5c9e6-6c54-417d-8375-db2d5f756d46",
-  VOLC_API_URL: "https://ark.cn-beijing.volces.com/api/v3/chat/completions",
-  VOLC_MODEL: "doubao-1-5-pro-256k-250115",
-  // 添加Kimi API配置
+  VOLC_API_URL: "https://ark.cn-beijing.volces.com/api/v3",
+  VOLC_MODEL: "doubao-seed-1-8-251228",
   KIMI_API_KEY: "39c5c9e6-6c54-417d-8375-db2d5f756d46",
-  KIMI_API_URL: "https://ark.cn-beijing.volces.com/api/v3/chat/completions",
-  KIMI_MODEL: "kimi-k2-250711"
+  KIMI_API_URL: "https://ark.cn-beijing.volces.com/api/v3",
+  KIMI_MODEL: "kimi-k2-thinking-251104"
 };
 
 // 状态变量
@@ -713,9 +711,8 @@ async function sendMessage() {
 
     let apiUrl, apiKey, model, requestBody;
 
-    // 根据选择的API设置不同的参数
     if (selectedApi === 'kimi') {
-      apiUrl = window.CHAT_CONFIG.KIMI_API_URL;
+      apiUrl = window.CHAT_CONFIG.KIMI_API_URL + "/chat/completions";
       apiKey = window.CHAT_CONFIG.KIMI_API_KEY;
       model = window.CHAT_CONFIG.KIMI_MODEL;
       requestBody = {
@@ -725,7 +722,7 @@ async function sendMessage() {
         max_tokens: 2000
       };
     } else if (selectedApi === 'volcengine') {
-      apiUrl = window.CHAT_CONFIG.VOLC_API_URL;
+      apiUrl = window.CHAT_CONFIG.VOLC_API_URL + "/chat/completions";
       apiKey = window.CHAT_CONFIG.VOLC_API_KEY;
       model = window.CHAT_CONFIG.VOLC_MODEL;
       requestBody = {
